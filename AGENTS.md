@@ -30,7 +30,7 @@ Your job is not only to write code but to **prove it works**. A change counts as
 | Visual check | Screenshots (headless render, emulator, or device) attached to the PR | Any UI or map style change |
 | On a device | Emulator or real phone | GPS, permissions, airplane mode, background behaviour |
 
-Cloud agent containers have **no emulator** (no `/dev/kvm`). Device-level behaviour there is *unverified* until the maintainer runs the manual steps. Say so plainly.
+Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does: every PR runs [CI](.github/workflows/ci.yml), which repeats the build, lint and test checks, enforces the APK size budget, and runs an emulator smoke test (`.github/scripts/emulator_smoke.sh`: install, fake GPS fixes, Follow me, rotate, background and resume, no crashes). Its screenshots are uploaded as the `emulator-screenshots` artifact. Read the CI result before calling a PR done. Things the emulator can't show (a real GPS receiver, airplane mode on a phone, battery) stay *unverified* until the maintainer runs the manual steps. Say so plainly.
 
 **Other rules**
 
@@ -81,7 +81,7 @@ The research measurement scripts are in `docs/research/scripts/`. Run them with 
 3. Write `sdk.dir=/opt/android-sdk` to `local.properties` (it is git-ignored).
 4. Maven Central sometimes returns HTTP 429 through the proxy. Retry, and use `--max-workers=2`.
 
-There is no emulator (no `/dev/kvm`). Device checks are the maintainer's.
+There is no emulator here (no `/dev/kvm`). Push and let CI's emulator job run the smoke test; real-phone checks are the maintainer's.
 
 ## Agent skills
 
