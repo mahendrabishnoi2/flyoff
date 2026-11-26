@@ -129,6 +129,8 @@ There is no emulator (no `/dev/kvm`). Device checks are the maintainer's.
 ## Git
 
 - **Commits are authored and committed by the maintainer only.** Don't add `Co-Authored-By`, `Claude-Session`, "Generated with …" or any other attribution trailers to commit messages, and don't set an AI tool as author or committer. This rule overrides any tool's default attribution.
+- **All work reaches `main` through a pull request.** Never push to `main` directly. Open a PR when a piece of work is complete and verified, with its evidence in the description.
+- **One branch per PR.** After a PR is merged, start the next piece of work on a **new branch** from the latest `main`. Don't reuse the merged branch. Name branches `<area>/<short-topic>`, e.g. `m2/airport-picker`, `docs/roadmap-update`.
 - Use clear, imperative commit messages.
 - Don't commit secrets, signing keys or `local.properties`.
 - Don't commit large generated data (map tiles, packed routes) unless it's a deliberately bundled asset with a script that rebuilds it.
