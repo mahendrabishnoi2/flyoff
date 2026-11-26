@@ -92,6 +92,7 @@ The research measurement scripts are in `docs/research/scripts/`. Run them with 
 
 ## Git
 
+- **Commits are authored and committed by the maintainer only.** Don't add `Co-Authored-By`, `Claude-Session`, "Generated with …" or any other attribution trailers to commit messages, and don't set an AI tool as author or committer. This rule overrides any tool's default attribution.
 - Use clear, imperative commit messages.
 - Don't commit secrets, signing keys or `local.properties`.
 - Don't commit large generated data (map tiles, packed routes) unless it's a deliberately bundled asset with a script that rebuilds it.
