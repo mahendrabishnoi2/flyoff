@@ -5,6 +5,8 @@ composeBom = "2026.11.01"
 activityCompose = "1.13.0"
 maplibre = "13.8.0"
 lifecycle = "2.11.1"
+junit = "4.13.2"
+orgJson = "20260814"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -12,6 +14,9 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+# Test only: a real JSON parser for the style test (android.jar's org.json is a stub in JVM tests).
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 maplibre-android = { group = "org.maplibre.gl", name = "android-sdk-opengl", version.ref = "maplibre" }
 
 [plugins]

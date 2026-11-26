@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- The GPS dot. Coarse is listed too so Android 12+ can offer "approximate";
+         the app explains that the dot needs precise. Foreground only: no background location. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- MapLibre's manifest asks for Wi-Fi state, but no code in the app or MapLibre reads it.
+         (MapLibre also merges INTERNET and ACCESS_NETWORK_STATE: its connectivity check needs
+         the latter, and route downloads will need INTERNET from Milestone 4.) -->
+    <uses-permission
+        android:name="android.permission.ACCESS_WIFI_STATE"
+        tools:node="remove" />
 
     <application
         android:dataExtractionRules="@xml/data_extraction_rules"

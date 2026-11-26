@@ -63,4 +63,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.maplibre.android)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }
