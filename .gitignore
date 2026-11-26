@@ -1,2 +1,29 @@
 # Claude Code local settings (.claude is a symlink to .agents)
 .agents/settings.local.json
+
+# Gradle and Android build output
+.gradle/
+.kotlin/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Machine-local configuration
+local.properties
+
+# Signing keys
+*.jks
+*.keystore
+
+# IDE (keep shared code style and inspection settings)
+.idea/*
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+*.iml
+.DS_Store
+
+# Python bytecode
+__pycache__/
