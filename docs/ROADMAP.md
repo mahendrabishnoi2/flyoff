@@ -1,0 +1,119 @@
+# Flyoff roadmap
+
+Flyoff is a free, open-source (GPL-3.0) Android app that shows your plane's live position on a map during a flight, with no internet.
+
+We build in **small milestones**. Each milestone ends with an app you can install and test on a real phone before starting the next. We don't start a milestone until the previous one works.
+
+Background research: [data sources and licensing](research/data-sources-validation.md) and [competitors](research/competitors.md).
+
+## Principles
+
+- **It always works offline.** The app must be useful even if the user downloaded nothing. Downloads only add detail.
+- **The riskiest things come first.** GPS in airplane mode and the offline map come before polish.
+- **Every milestone is testable without flying.** A flight simulator arrives in Milestone 2.
+- **Free, with no ads, no account and no tracking.**
+
+## Status
+
+| # | Milestone | Status |
+|---|---|---|
+| 0 | Research and validation | ✅ Done |
+| 1 | Map and GPS dot | ⏳ Next |
+| 2 | Flight setup and stats | Planned |
+| 3 | Reliable tracking | Planned |
+| 4 | Route map download | Planned |
+| 5 | Flight-number suggestion | Planned |
+| 6 | Extras | Planned |
+| – | Later | Ideas |
+
+---
+
+## Milestone 1: Map and GPS dot
+
+**Goal:** prove the core idea. A map works with no internet, and the phone's GPS position shows on it.
+
+**Scope:**
+- An Android project in Kotlin, Jetpack Compose and Gradle (Kotlin DSL, version catalog).
+- MapLibre Native Android (version 11.8 or later, for PMTiles support).
+- A world map up to zoom 5 (about 15 MB), cut from OpenFreeMap's weekly PMTiles file and bundled as an app asset (`pmtiles://asset://`).
+- One simple map style (OpenMapTiles schema), with Latin fonts only.
+- A location-permission request, and a live GPS dot that follows the user.
+- The map credit "© OpenMapTiles © OpenStreetMap contributors" shown on the map.
+- A script, kept in the repo, that rebuilds the bundled map file.
+
+**Not in this milestone:** airports, routes, downloads, background tracking.
+
+**Done when:**
+- With airplane mode on, the app opens, shows the world map and shows a moving GPS dot on a walk or drive.
+- The release APK is 30 MB or less.
+
+## Milestone 2: Flight setup and stats
+
+**Goal:** the user can set up a flight and see useful numbers.
+
+**Scope:**
+- Bundled airports: OurAirports filtered to those with scheduled service (about 4,300 airports, about 140 KB).
+- An origin and destination picker that searches by city, airport name or IATA code, offline.
+- The great-circle route drawn on the map.
+- Stats: altitude, ground speed, heading, distance flown and remaining, time remaining, and ETA in destination local time.
+- **A flight simulator:** a debug mode that replays a fake GPS track along the route at chosen speeds, so later milestones can be tested on the ground.
+- Unit tests for the geodesy maths: great-circle distance, bearing, interpolation and cross-track distance.
+
+**Done when:** a simulated LHR→JFK flight shows a correct route, a moving dot and plausible stats.
+
+## Milestone 3: Reliable tracking
+
+**Goal:** tracking survives a real flight.
+
+**Scope:**
+- A foreground service with a persistent notification, so tracking continues with the screen off.
+- A "GPS ready" check before takeoff: get a position fix while still at the gate.
+- Detect battery saver set to "GPS off when screen off" (Android 9+) and warn the user.
+- When GPS drops out, keep the dot moving along the route from the last known speed, shown as an estimate.
+- Keep the battery and screen-on behaviour sensible.
+
+**Done when:**
+- A simulated flight with GPS gaps behaves correctly.
+- A real test (car, train or flight) with the screen off records a full track.
+
+## Milestone 4: Route map download
+
+**Goal:** more map detail along the route.
+
+**Scope:**
+- Download a strip about 350 km wide along the route at zoom 8 from OpenFreeMap, using MapLibre's offline downloader with a route-shaped region.
+- Follow OpenFreeMap's terms: at most 3,000 tiles and 50 MB per download, at most 4 parallel requests, a unique User-Agent, and only when the user starts it. Long routes are split into several downloads.
+- Show the size before downloading, default to Wi-Fi only, and show a "Ready for offline ✓" badge.
+- A storage screen, and auto-deletion 3 days after landing.
+- An optional zoom-9 "detailed" download (Wi-Fi only).
+
+**Done when:** a corridor for London–New York downloads within the limits and shows in airplane mode.
+
+## Milestone 5: Flight-number suggestion
+
+**Goal:** quicker setup for users who know their flight number.
+
+**Scope:**
+- A build script that packs the VRS standing-data routes (CC0, about 630k) into a compact format of about 3 MB.
+- Match a flight number to a callsign: convert the IATA airline code to ICAO, then look up the number. Show the result as a **suggestion the user confirms**, never as fact. Airport selection stays the main input.
+- For multi-stop routes, the user picks the leg.
+- A weekly data update, downloaded from our own GitHub Release.
+
+**Done when:** BA117 suggests LHR→JFK, and an unknown flight falls back cleanly to the airport picker.
+
+## Milestone 6: Extras
+
+- "What's below me": the nearest city or region and the country, offline.
+- A flight log and history.
+- A summary screen after landing.
+- GPX/KML track export (no free Android app has this).
+- Dark "cockpit" map theme.
+
+## Later (ideas, not committed)
+
+- Terrain and height above ground (Copernicus GLO-30, with the required notices).
+- A Wear OS companion app.
+- Detailed region packs through Play Asset Delivery.
+- Boarding-pass scanning.
+- Fonts for non-Latin scripts.
+- Release on F-Droid.
