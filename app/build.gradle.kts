@@ -26,6 +26,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // For testing only: `-Pflyoff.testSigning` signs the release build with
+            // the debug key so it can be installed (CI uses this). Never publish such a build.
+            if (providers.gradleProperty("flyoff.testSigning").isPresent) {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 

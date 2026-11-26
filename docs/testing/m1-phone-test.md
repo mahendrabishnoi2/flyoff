@@ -1,13 +1,16 @@
 # Milestone 1: phone test
 
-These checks can't run in a cloud session (no emulator), so they're done by hand on a real Android phone (Android 8 or later, with GPS). Note the phone model and Android version, and the result of each step.
+CI runs an emulator smoke test, but these checks need real hardware, so they're done by hand on a real Android phone (Android 8 or later, with GPS). Note the phone model and Android version, and the result of each step.
 
-**Build and install**
+**Get the app**
 
-```bash
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
-```
+- **From CI (easiest):** open the PR's latest CI run (Checks tab → CI → Summary). Under **Artifacts**, download `flyoff-<commit>-arm64-v8a.apk` (most phones) or `flyoff-<commit>-universal.apk` (any phone) and open it on the phone. You'll have to allow installing from your browser or file manager. These are the minified release build, signed with a throwaway CI key. Uninstall any earlier Flyoff first, because each CI run's key differs.
+- **Or build it yourself:**
+
+  ```bash
+  ./gradlew assembleRelease -Pflyoff.testSigning
+  adb install -r app/build/outputs/apk/release/app-arm64-v8a-release.apk
+  ```
 
 ## Steps
 
@@ -43,7 +46,7 @@ adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 11. **Background.** Background the app for a minute, then check Settings → Location → recent access.
     - Flyoff isn't using location.
     - When you return, "Waiting…" shows briefly, then the fix comes back.
-12. **Release build (optional).** Install the release APK and repeat step 1. This checks that the minified build starts.
+12. **Release build.** Note which APK you tested. The CI APKs and the `-Pflyoff.testSigning` build are already the minified release build, so the steps above cover it.
 
 ## Results
 

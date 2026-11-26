@@ -30,7 +30,7 @@ Your job is not only to write code but to **prove it works**. A change counts as
 | Visual check | Screenshots (headless render, emulator, or device) attached to the PR | Any UI or map style change |
 | On a device | Emulator or real phone | GPS, permissions, airplane mode, background behaviour |
 
-Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does: every PR runs [CI](.github/workflows/ci.yml), which repeats the build, lint and test checks, enforces the APK size budget, and runs an emulator smoke test (`.github/scripts/emulator_smoke.sh`: install, fake GPS fixes, Follow me, rotate, background and resume, no crashes). Its screenshots are uploaded as the `emulator-screenshots` artifact. Read the CI result before calling a PR done. Things the emulator can't show (a real GPS receiver, airplane mode on a phone, battery) stay *unverified* until the maintainer runs the manual steps. Say so plainly.
+Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does: every PR runs [CI](.github/workflows/ci.yml), which repeats the build, lint and test checks, enforces the APK size budget, and runs an emulator smoke test on the minified release build (`.github/scripts/emulator_smoke.sh`: install, fake GPS fixes, Follow me, rotate, background and resume, no crashes). Its screenshots are uploaded as the `emulator-screenshots` artifact. Each run also uploads installable test APKs (`flyoff-<commit>-arm64-v8a.apk`, `flyoff-<commit>-universal.apk`) for the maintainer's phone checks. Read the CI result before calling a PR done. Things the emulator can't show (a real GPS receiver, airplane mode on a phone, battery) stay *unverified* until the maintainer runs the manual steps. Say so plainly.
 
 **Other rules**
 
@@ -59,6 +59,7 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 ```bash
 ./gradlew assembleDebug lintDebug testDebugUnitTest   # every change
 ./gradlew assembleRelease                             # size check: ls -l app/build/outputs/apk/release/
+./gradlew assembleRelease -Pflyoff.testSigning        # installable release build, signed with the debug key (testing only)
 tools/basemap/build_basemap.sh                        # rebuild the bundled map + fonts (needs curl, python3)
 python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
 NODE_PATH=$(npm root -g) node tools/basemap/preview/render.js [outdir]   # headless map screenshots (Playwright + Chromium)

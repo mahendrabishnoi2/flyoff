@@ -34,8 +34,10 @@ jobs:
       - name: Install Android SDK platform
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.2" > /dev/null
 
+      # -Pflyoff.testSigning signs the minified release build with the runner's
+      # debug key so testers can install it. It is not a publishable build.
       - name: Build, lint and unit tests
-        run: ./gradlew assembleDebug lintDebug testDebugUnitTest assembleRelease
+        run: ./gradlew assembleDebug lintDebug testDebugUnitTest assembleRelease -Pflyoff.testSigning
 
       - name: Map build tests
         run: python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
@@ -43,12 +45,45 @@ jobs:
       - name: Check APK size budget
         run: python3 -I .github/scripts/apk_report.py app/build/outputs/apk/release 30000000 >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload debug APKs
+      - name: Name the test APKs
+        env:
+          # On a PR, github.sha is GitHub's merge commit; name APKs after the branch head.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          short=${HEAD_SHA:0:7}
+          mkdir -p test-apks
+          for abi in arm64-v8a universal x86_64; do
+            cp "app/build/outputs/apk/release/app-$abi-release.apk" "test-apks/flyoff-$short-$abi.apk"
+          done
+          echo "SHORT_SHA=$short" >> "$GITHUB_ENV"
+          {
+            echo "### Install on a phone"
+            echo
+            echo "Download \`flyoff-$short-arm64-v8a.apk\` (most phones) or \`flyoff-$short-universal.apk\` (any phone) from **Artifacts** below."
+            echo "These are minified release builds signed with a throwaway CI key: uninstall an earlier Flyoff before installing one from a different run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # archive: false uploads the .apk itself, so it downloads as an APK, not a zip.
+      - name: Upload APK for most phones (arm64-v8a)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: debug-apks
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          path: test-apks/flyoff-${{ env.SHORT_SHA }}-arm64-v8a.apk
+          archive: false
+          retention-days: 30
+
+      - name: Upload APK for any phone (universal)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: test-apks/flyoff-${{ env.SHORT_SHA }}-universal.apk
+          archive: false
+          retention-days: 30
+
+      - name: Upload APK for the emulator job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: emulator-apk
+          path: test-apks/flyoff-${{ env.SHORT_SHA }}-x86_64.apk
+          retention-days: 3
 
       - name: Upload reports
         if: always()
@@ -58,8 +93,10 @@ jobs:
           path: |
             app/build/reports/
             app/build/test-results/
+            app/build/outputs/mapping/release/mapping.txt
           retention-days: 14
 
+  # Runs the minified release build, so R8 problems show up here.
   emulator:
     name: Emulator smoke test
     needs: build
@@ -68,10 +105,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Download debug APKs
+      - name: Download the release APK
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: debug-apks
+          name: emulator-apk
           path: apks
 
       - name: Enable KVM
@@ -91,7 +128,7 @@ jobs:
           # swangle_indirect (ANGLE on SwiftShader Vulkan): with swiftshader_indirect
           # MapLibre draws no text labels, which hides label regressions.
           emulator-options: -no-window -gpu swangle_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash .github/scripts/emulator_smoke.sh apks/app-x86_64-debug.apk emulator-out
+          script: bash .github/scripts/emulator_smoke.sh apks/*-x86_64.apk emulator-out
 
       - name: Upload screenshots and logs
         if: always()
