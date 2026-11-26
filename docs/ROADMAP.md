@@ -111,15 +111,24 @@ Background research: [data sources and licensing](research/data-sources-validati
 
 ## Agent skills
 
-Skills are added at the milestone that needs them, not all at once. How to add them is in [AGENTS.md](../AGENTS.md#agent-skills).
+Skills are added at the milestone that needs them, not all at once. **When you start a milestone, install the skills listed for it** before writing code. The full procedure is in [AGENTS.md](../AGENTS.md#agent-skills).
 
-| When | Skill | Source |
-|---|---|---|
-| ✅ Milestone 1 (installed) | `maplibre-native-gl-js-parity`, `android-permissions-security`, `android-ux` | MapLibre, Google, rcosteira79 |
-| Milestone 2 | `testing-setup` (tell it not to add Hilt), `android-testing` | Google, rcosteira79 |
-| Milestone 3 | `android-profiler` (battery, wake locks), `jetpack-compose-performance` | Google |
-| Release | `play-policy-insights` (review its scripts first), `fdroid-publishing` | Google, ItsAhadun |
-| Later | Wear OS skills | Google |
+| When | Skill (`--skill`) | Repo (`owner/repo`) | Notes |
+|---|---|---|---|
+| ✅ Milestone 1 (installed) | `maplibre-native-gl-js-parity` | `maplibre/maplibre-agent-skills` | PMTiles and other differences between MapLibre on Android and on the web |
+| ✅ Milestone 1 (installed) | `android-permissions-security` | `android/skills` | Location permission flow; foreground service later |
+| ✅ Milestone 1 (installed) | `android-ux` | `rcosteira79/android-skills` | Material 3 UX review |
+| Milestone 2 | `testing-setup` | `android/skills` | It adds Hilt if the project has no DI library. **Tell it not to.** |
+| Milestone 2 | `android-testing` | `rcosteira79/android-skills` | Compose UI and coroutine test patterns |
+| Milestone 3 | `android-profiler` | `android/skills` | Battery drain and wake locks |
+| Milestone 3 | `jetpack-compose-performance` | `android/skills` | Recomposition and frame-time audits |
+| Release | `play-policy-insights` | `android/skills` | **Bundles Python scripts** that scrape Play. Review them first, and get the maintainer's OK before installing. |
+| Release | `fdroid-publishing` | `ItsAhadun/fdroid-publishing-skill` | Community skill with one author. Re-read it before use. |
+| Later (Wear OS) | `wear-compose-m3`, `wear-widgets` | `android/skills` | Only if a Wear OS app is built |
+
+Licence for the `--skill`/repo pairs above: `android/skills` is Apache-2.0; the others are MIT. The upstream licence files for the repos already used are in `.agents/licenses/`.
+
+Assessed and **not** to install: anthropics `frontend-design` (web only), Google's `android-cli` (pipes a remote script into bash), large Compose packs (aldefy, Meet-Miyani), JetBrains/Kotlin skills (multiplatform and server), generic community packs.
 
 ## Later (ideas, not committed)
 

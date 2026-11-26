@@ -51,14 +51,20 @@ The research measurement scripts are in `docs/research/scripts/`. Run them with 
 
 - Skills live in `.agents/skills/` and work with any harness that reads that folder (OpenCode, Pi, Codex and others). `.claude` is a symlink to `.agents`, so Claude Code sees the same skills. `CLAUDE.md` imports this file.
 - They are installed with the [`skills` CLI](https://skills.sh) and pinned in `skills-lock.json`. Upstream licences are kept in `.agents/licenses/`.
-- **Add a skill only when the current milestone needs it.** Read its `SKILL.md` before committing it, and skip anything that runs scripts or fetches remote code. To add one:
+- **Which skills, and when:** [docs/ROADMAP.md → Agent skills](docs/ROADMAP.md#agent-skills) lists each skill with its `owner/repo` and the milestone that needs it. When you start a milestone, install that milestone's skills first. Don't install skills for later milestones.
+- **How to add one:**
+  1. Install it into `.agents/skills/` (pinned in `skills-lock.json`):
 
-  ```bash
-  DISABLE_TELEMETRY=1 npx skills add <owner/repo> --skill <name> -a universal --copy -y
-  ```
+     ```bash
+     DISABLE_TELEMETRY=1 npx skills add <owner/repo> --skill <name> -a universal --copy -y
+     ```
 
-  Then add its upstream licence to `.agents/licenses/` and to the table there.
-- Planned additions by milestone are listed in [docs/ROADMAP.md](docs/ROADMAP.md#agent-skills).
+  2. Read its `SKILL.md` and any `references/`. If it bundles scripts (`.py`, `.sh`, `.js`) or tells the agent to fetch and run remote code, stop and ask the maintainer before committing.
+  3. If the repo is new to us, copy its upstream licence to `.agents/licenses/<repo>.LICENSE.txt` and add a row to `.agents/licenses/README.md`.
+  4. Mark the skill as installed in the roadmap table, and commit the skill, `skills-lock.json` and the licence together.
+- **Restoring on a fresh clone:** the skills are committed, so nothing needs to be installed. `npx skills experimental_install` can restore them from `skills-lock.json` if needed.
+- **Updating:** `npx skills update` changes skill content. Read the diff before committing.
+- A skill not listed in the roadmap needs the same review, plus a line in the roadmap table saying why.
 
 ## Data and licensing rules (must follow)
 
