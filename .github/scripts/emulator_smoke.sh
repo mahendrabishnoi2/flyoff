@@ -32,19 +32,19 @@ no_crash() {
 
 tap_text() {
   local bounds
-  bounds=$(grep -o "text=\"$2\"[^>]*bounds=\"[^\"]*\"" "$OUT/$1.xml" | grep -o 'bounds="[^"]*"' | head -1)
+  bounds=$(grep -o "text=\"$2\"[^>]*bounds=\"[^\"]*\"" "$OUT/$1.xml" | grep -o 'bounds="[^"]*"' | head -1 || true)
   [ -n "$bounds" ] || fail "no '$2' button to tap ($1)"
   # bounds="[x1,y1][x2,y2]" -> centre
-  read -r x1 y1 x2 y2 < <(echo "$bounds" | tr -c '0-9' ' ')
+  read -r x1 y1 x2 y2 < <(echo "$bounds" | tr -c '0-9\n' ' ')
   adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
 }
 
-# Feed fixes moving east along 51.47N at about 10 km altitude.
-# `geo fix` takes longitude first.
+# Feed fixes moving east along 51.47N at about 10 km altitude and 450 knots.
+# `geo fix` takes longitude first, then altitude (m), satellites and speed (knots).
 fly() {
   local lon
   for lon in -0.45 -0.42 -0.39 -0.36 -0.33; do
-    adb emu geo fix "$lon" 51.47 10000
+    adb emu geo fix "$lon" 51.47 10000 8 450
     sleep 1
   done
 }
