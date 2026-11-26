@@ -1,0 +1,2 @@
+# Claude Code local settings (.claude is a symlink to .agents)
+.agents/settings.local.json
