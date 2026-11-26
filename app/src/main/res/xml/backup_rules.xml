@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backup rules for Android 11 and lower. Empty keeps the platform defaults.
+     Keep in step with data_extraction_rules.xml. -->
+<full-backup-content />

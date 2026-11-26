@@ -35,7 +35,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 **Scope:**
 - An Android project in Kotlin, Jetpack Compose and Gradle (Kotlin DSL, version catalog).
 - MapLibre Native Android (version 13.7.1 or later, which can load a PMTiles file from the app's assets).
-- A world map up to zoom 5 (about 15 MB), cut from OpenFreeMap's weekly PMTiles file and bundled as an app asset (`pmtiles://asset://`).
+- A world map up to zoom 5, cut from OpenFreeMap's planet PMTiles file, reduced to the layers and Latin/English names our style uses (7.3 MB; 56 MB unreduced), and bundled as an app asset (`pmtiles://asset://`).
 - One simple map style (OpenMapTiles schema), with Latin fonts only.
 - A location-permission request, and a live GPS dot that follows the user.
 - The map credit "OpenFreeMap © OpenMapTiles © OpenStreetMap contributors" shown on the map.

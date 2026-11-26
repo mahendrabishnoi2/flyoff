@@ -144,6 +144,12 @@ Each tile's bytes are counted once, even when several tiles share the same data 
 - "Continental US, zoom 0–10, is 361 MB" ✓. This comes from VIPTrack's release notes; we measured **386 MB** for the box -125, 24, -66.9, 49.5.
 - "A city at 68 MB full detail vs 813 KB to zoom 6" ✗ **Unsourced.** The number isn't in any cited source. Drop it.
 
+**OpenFreeMap (OpenMapTiles schema), measured 2026-11-26** (build `20261101_080013_pt`, `tools/basemap/tile_stats.py`):
+
+- The raw zoom 0–5 world extract is **56.1 MB** (zoom 0–4: 29.0 MB), nearly 4× the Protomaps figure. The `place` layer carries every `name:xx` translation, including about 11k state labels from zoom 2.
+- Keeping only the layers our style draws and the names `name`, `name:en`, `name_en`, `name:latin` and `name_int` brings it to **7.3 MB** (`tools/basemap/build_basemap.sh`). The rendered map is pixel-identical.
+- The three bundled Noto Sans weights, ranges below U+0600, total 1.7 MB.
+
 **Per-flight corridor**, 350 km wide along the great circle, zooms 6 to N:
 
 | Route | Length | Up to zoom 8 | Up to zoom 9 | Up to zoom 10 |

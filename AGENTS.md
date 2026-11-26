@@ -10,7 +10,7 @@ Flyoff is a free, open-source Android app that shows the plane's live GPS positi
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Work only on the current milestone.
 - Research behind the decisions: [docs/research/](docs/research/).
 
-**Current state:** research is done. Milestone 1 (map and GPS dot) is next. There is no app code yet.
+**Current state:** Milestone 1 (map and GPS dot) is in progress. The app skeleton with MapLibre and the bundled world map, style and fonts are in; the GPS dot is not.
 
 ## How we work: verify everything
 
@@ -46,25 +46,42 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). Device-level behavi
 | Language | Kotlin |
 | UI | Jetpack Compose, Material 3; single activity |
 | Build | Gradle with Kotlin DSL and a version catalog (`gradle/libs.versions.toml`) |
-| Map engine | MapLibre Native Android ≥ 13.7.1 (needed to load `pmtiles://asset://` from the app's assets) |
-| Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map as a PMTiles asset; route downloads through MapLibre's offline downloader |
+| Map engine | MapLibre Native Android, the **`android-sdk-opengl`** artifact, ≥ 13.7.1 (needed to load `pmtiles://asset://`). The plain `android-sdk` artifact uses Vulkan and declares Vulkan as *required*, which would hide the app on phones without it. MapLibre's `2026.x-globe` releases come from a feature branch, so stay on the stable 13.x line. |
+| Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map `app/src/main/assets/basemap/world.pmtiles` (zoom 0–5, 7.3 MB, stored uncompressed in the APK); style `assets/style/flyoff.json`; fonts `assets/fonts/`. Route downloads go through MapLibre's offline downloader (Milestone 4). |
 | Location | Android location APIs; a foreground service for in-flight tracking (from Milestone 3) |
 | Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time |
+| Android | Package `io.github.mahendrabishnoi2.flyoff`, minSdk 26, targetSdk 37, compileSdk 37.2 (Compose 1.13 needs 37.1+). AGP 9 with its built-in Kotlin support. All versions live in `gradle/libs.versions.toml`. |
 
-Fill in the minimum SDK, package name and exact versions when Milestone 1 is set up, then record them here.
+**Size budget:** each per-CPU-type release APK must be 30 MB or less (arm64-v8a is 20.4 MB now). Release builds produce per-ABI APKs and a universal APK in `app/build/outputs/apk/release/`.
 
 ## Commands
 
-The Android project doesn't exist yet. Once Milestone 1 creates it, the standard Gradle wrapper commands apply. Update this section if they change.
-
 ```bash
-./gradlew assembleDebug
-./gradlew test
-./gradlew lint
-./gradlew connectedAndroidTest
+./gradlew assembleDebug lintDebug testDebugUnitTest   # every change
+./gradlew assembleRelease                             # size check: ls -l app/build/outputs/apk/release/
+tools/basemap/build_basemap.sh                        # rebuild the bundled map + fonts (needs curl, python3)
+python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
+NODE_PATH=$(npm root -g) node tools/basemap/preview/render.js [outdir]   # headless map screenshots (Playwright + Chromium)
+python3 -I tools/basemap/tile_stats.py app/src/main/assets/basemap/world.pmtiles   # map size per zoom/layer
 ```
 
 The research measurement scripts are in `docs/research/scripts/`. Run them with `python3 -I`.
+
+**Changing the map:** the build keeps only the tile layers and name fields that `flyoff.json` uses, and fails if the style needs something it dropped. After a style change that uses a new layer, re-run `build_basemap.sh`. The pinned OpenFreeMap build is kept upstream for only about 6 months, so bump `OFM_BUILD` (and `OFM_BYTES`) when it disappears.
+
+### Setting up a cloud session (no Android SDK installed)
+
+1. Download the newest `commandlinetools-linux` zip listed in `https://dl.google.com/android/repository/repository2-3.xml` and check its checksum against that file.
+2. Unzip it to `/opt/android-sdk/cmdline-tools/latest`, accept the licences, then install the platform tools and the compile SDK platform:
+
+   ```bash
+   /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platform-tools" "platforms;android-37.2"
+   ```
+
+3. Write `sdk.dir=/opt/android-sdk` to `local.properties` (it is git-ignored).
+4. Maven Central sometimes returns HTTP 429 through the proxy. Retry, and use `--max-workers=2`.
+
+There is no emulator (no `/dev/kvm`). Device checks are the maintainer's.
 
 ## Agent skills
 

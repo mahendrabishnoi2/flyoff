@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ backup rules. Empty sections keep the platform defaults.
+     Exclude large re-downloadable data (map downloads) here once it exists. -->
+<data-extraction-rules>
+    <cloud-backup />
+    <device-transfer />
+</data-extraction-rules>
