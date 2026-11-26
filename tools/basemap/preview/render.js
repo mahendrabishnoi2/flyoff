@@ -25,6 +25,9 @@ const VIEWS = [
   { name: 'north-atlantic-z3', lng: -40, lat: 52, zoom: 3 },
   { name: 'europe-z4', lng: 12, lat: 50, zoom: 4 },
   { name: 'india-z5', lng: 79, lat: 22, zoom: 5 },
+  // Past the data's zoom 5: overzoomed tiles and the smaller cities.
+  { name: 'uk-z6', lng: -3, lat: 54, zoom: 6 },
+  { name: 'uk-z8', lng: -2, lat: 53, zoom: 8 },
 ];
 
 const TYPES = {

@@ -17,14 +17,19 @@ data class GpsFix(
 )
 
 /**
- * Speed above which the dot turns into an arrow pointing along the GPS course.
- * Below it, GPS course is mostly noise. 1 m/s (3.6 km/h) is a slow walk.
+ * The dot turns into an arrow along the GPS course at [ARROW_ON_SPEED] and back
+ * into a dot below [ARROW_OFF_SPEED]. The gap stops it flickering at walking
+ * pace; below about 0.5 m/s the GPS course is mostly noise.
  */
-const val MOVING_SPEED_METERS_PER_SECOND = 1.0f
+const val ARROW_ON_SPEED = 1.5f
+const val ARROW_OFF_SPEED = 0.5f
 
-/** True when the GPS course is worth showing as an arrow. */
-fun GpsFix.showsBearing(): Boolean =
-    hasBearing && (speedMetersPerSecond ?: 0f) >= MOVING_SPEED_METERS_PER_SECOND
+/** True when the GPS course is worth showing as an arrow, given whether it is shown now. */
+fun GpsFix.showsBearing(shownNow: Boolean): Boolean {
+    val speed = speedMetersPerSecond
+    if (!hasBearing || speed == null) return false
+    return speed >= if (shownNow) ARROW_OFF_SPEED else ARROW_ON_SPEED
+}
 
 fun metersPerSecondToKmh(speed: Float): Float = speed * 3.6f
 

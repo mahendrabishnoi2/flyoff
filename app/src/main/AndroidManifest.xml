@@ -7,6 +7,14 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- The app exists to show a GPS position, so app stores shouldn't offer it to
+         devices without satellite GPS (lint warns about that; it is the point here).
+         The app still checks at runtime. -->
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="true"
+        tools:ignore="UnnecessaryRequiredFeature" />
+
     <!-- MapLibre's manifest asks for Wi-Fi state, but no code in the app or MapLibre reads it.
          (MapLibre also merges INTERNET and ACCESS_NETWORK_STATE: its connectivity check needs
          the latter, and route downloads will need INTERNET from Milestone 4.) -->

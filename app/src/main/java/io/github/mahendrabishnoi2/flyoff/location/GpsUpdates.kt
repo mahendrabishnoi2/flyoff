@@ -18,6 +18,8 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 
 /** The GPS receiver's state as the UI needs it. */
 data class GpsState(
+    /** False on a device without a GPS receiver; nothing else here matters then. */
+    val hasReceiver: Boolean,
     /** False when the user has turned location off in system settings. */
     val providerEnabled: Boolean,
     /** The latest fix since the app came to the foreground, or null while waiting for one. */
@@ -35,7 +37,8 @@ private const val UPDATE_INTERVAL_MS = 1_000L
 @Composable
 fun rememberGpsUpdates(active: Boolean): GpsState {
     val context = LocalContext.current
-    var state by remember { mutableStateOf(GpsState(providerEnabled = true, location = null)) }
+    val hasReceiver = remember(context) { hasGpsReceiver(context) }
+    var state by remember { mutableStateOf(GpsState(hasReceiver, providerEnabled = true, location = null)) }
 
     LifecycleStartEffect(active, context) {
         val locationManager = context.getSystemService(LocationManager::class.java)
@@ -43,7 +46,7 @@ fun rememberGpsUpdates(active: Boolean): GpsState {
         // no default methods, and a missing onStatusChanged crashes there.
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                state = GpsState(providerEnabled = true, location = location)
+                state = state.copy(providerEnabled = true, location = location)
             }
 
             override fun onProviderEnabled(provider: String) {
@@ -51,15 +54,17 @@ fun rememberGpsUpdates(active: Boolean): GpsState {
             }
 
             override fun onProviderDisabled(provider: String) {
-                state = GpsState(providerEnabled = false, location = null)
+                state = state.copy(providerEnabled = false, location = null)
             }
 
             @Deprecated("Deprecated in Android 10; still called on older versions.")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
         }
         // A fix from before the app went to the background may be far out of date.
-        state = GpsState(providerEnabled = true, location = null)
-        if (active) startGps(context, locationManager, listener) { state = it }
+        state = GpsState(hasReceiver, providerEnabled = true, location = null)
+        if (active && hasReceiver) {
+            startGps(context, locationManager, listener) { enabled -> state = state.copy(providerEnabled = enabled) }
+        }
         onStopOrDispose { locationManager.removeUpdates(listener) }
     }
     return state
@@ -69,12 +74,12 @@ private fun startGps(
     context: Context,
     locationManager: LocationManager,
     listener: LocationListener,
-    onState: (GpsState) -> Unit,
+    onProviderEnabled: (Boolean) -> Unit,
 ) {
     val granted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
         PackageManager.PERMISSION_GRANTED
     if (!granted) return
-    onState(GpsState(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER), null))
+    onProviderEnabled(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
     try {
         locationManager.requestLocationUpdates(
             LocationManager.GPS_PROVIDER, UPDATE_INTERVAL_MS, 0f, listener, Looper.getMainLooper(),
@@ -83,10 +88,15 @@ private fun startGps(
         // The permission was revoked between the check and the call. The next
         // resume reads the permission again and the UI asks for it.
     } catch (_: IllegalArgumentException) {
-        // The device has no GPS receiver.
-        onState(GpsState(providerEnabled = false, location = null))
+        // No GPS provider after all; hasGpsReceiver() should have caught this.
+        onProviderEnabled(false)
     }
 }
+
+/** True if the device has satellite GPS and the platform offers its provider. */
+private fun hasGpsReceiver(context: Context): Boolean =
+    context.packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS) &&
+        LocationManager.GPS_PROVIDER in context.getSystemService(LocationManager::class.java).allProviders
 
 /** The fields of [Location] that the status line shows. */
 fun Location.toGpsFix() = GpsFix(

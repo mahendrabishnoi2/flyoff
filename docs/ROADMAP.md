@@ -18,7 +18,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 | # | Milestone | Status |
 |---|---|---|
 | 0 | Research and validation | ✅ Done |
-| 1 | Map and GPS dot | ⏳ Next |
+| 1 | Map and GPS dot | 🧪 Built and verified in the cloud; [phone test](testing/m1-phone-test.md) pending |
 | 2 | Flight setup and stats | Planned |
 | 3 | Reliable tracking | Planned |
 | 4 | Route map download | Planned |

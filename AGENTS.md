@@ -10,7 +10,7 @@ Flyoff is a free, open-source Android app that shows the plane's live GPS positi
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Work only on the current milestone.
 - Research behind the decisions: [docs/research/](docs/research/).
 
-**Current state:** Milestone 1 (map and GPS dot) is code-complete: the bundled offline world map, the location permission flow and a live GPS dot fed by `LocationManager.GPS_PROVIDER` (no Play Services). Review fixes are in progress, and the maintainer's phone test is still pending.
+**Current state:** Milestone 1 (map and GPS dot) is code-complete: the bundled offline world map, the location permission flow and a live GPS dot fed by `LocationManager.GPS_PROVIDER` (no Play Services). Independent review fixes are in. Still pending: the maintainer's [phone test](docs/testing/m1-phone-test.md).
 
 ## How we work: verify everything
 

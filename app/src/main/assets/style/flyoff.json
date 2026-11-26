@@ -119,6 +119,26 @@
       }
     },
     {
+      "id": "city-dot-minor",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 5,
+      "metadata": {"flyoff:about": "Smaller cities once zoomed in past the major ones: rank 5 from zoom 5, rank 6 from zoom 6 (the z5 tiles hold ranks up to 6)."},
+      "filter": ["all",
+        ["==", ["get", "class"], "city"],
+        ["!=", ["get", "capital"], 2],
+        [">=", ["coalesce", ["get", "rank"], 99], 5],
+        ["<=", ["coalesce", ["get", "rank"], 99], ["step", ["zoom"], 5, 6, 6]]
+      ],
+      "paint": {
+        "circle-radius": 1.8,
+        "circle-color": "#666666",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1
+      }
+    },
+    {
       "id": "city-dot",
       "type": "circle",
       "source": "openmaptiles",
@@ -136,6 +156,33 @@
         "circle-color": "#555555",
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 1
+      }
+    },
+    {
+      "id": "label-city-minor",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 5,
+      "filter": ["all",
+        ["==", ["get", "class"], "city"],
+        ["!=", ["get", "capital"], 2],
+        [">=", ["coalesce", ["get", "rank"], 99], 5],
+        ["<=", ["coalesce", ["get", "rank"], 99], ["step", ["zoom"], 5, 6, 6]]
+      ],
+      "layout": {
+        "symbol-sort-key": ["coalesce", ["get", "rank"], 99],
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 5, 11, 8, 12],
+        "text-max-width": 8,
+        "text-variable-anchor": ["left", "right", "top", "bottom"],
+        "text-radial-offset": 0.4
+      },
+      "paint": {
+        "text-color": "#555555",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
       }
     },
     {

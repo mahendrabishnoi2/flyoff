@@ -54,6 +54,7 @@ fun FlyoffScreen() {
     val precise = permission.access == LocationAccess.PRECISE
     val gps = rememberGpsUpdates(active = precise)
     var following by rememberSaveable { mutableStateOf(false) }
+    var mapError by remember { mutableStateOf<String?>(null) }
 
     // Keep MapLibre's attribution, logo and compass clear of the system bars and of the panel.
     var panelHeight by remember { mutableIntStateOf(0) }
@@ -73,6 +74,7 @@ fun FlyoffScreen() {
             following = following && precise,
             onFollowingChange = { following = it },
             ornamentInsets = ornamentInsets,
+            onLoadFailed = { mapError = it },
             modifier = Modifier.fillMaxSize(),
         )
         Box(
@@ -87,6 +89,7 @@ fun FlyoffScreen() {
             StatusPanel(
                 permission = permission,
                 gps = gps,
+                mapError = mapError,
                 following = following,
                 onFollowingChange = { following = it },
                 modifier = Modifier.widthIn(max = 560.dp),
@@ -99,13 +102,27 @@ fun FlyoffScreen() {
 private fun StatusPanel(
     permission: LocationPermission,
     gps: GpsState,
+    mapError: String?,
     following: Boolean,
     onFollowingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+        if (mapError != null) {
+            MessageCard(
+                title = stringResource(R.string.map_error_title),
+                body = stringResource(R.string.map_error_body, mapError),
+            )
+        }
         val location = gps.location
+        if (!gps.hasReceiver) {
+            MessageCard(
+                title = stringResource(R.string.no_gps_title),
+                body = stringResource(R.string.no_gps_body),
+            )
+            return@Column
+        }
         if (permission.access == LocationAccess.PRECISE && location != null) {
             ElevatedFilterChip(
                 selected = following,
@@ -133,11 +150,20 @@ private fun StatusPanel(
                     )
                 }
             }
-            LocationAccess.NOT_ASKED, LocationAccess.DENIED -> MessageCard(
+            LocationAccess.NOT_ASKED -> MessageCard(
                 title = stringResource(R.string.permission_title),
                 body = stringResource(R.string.permission_body),
                 action = stringResource(R.string.permission_allow),
                 onAction = permission.request,
+            )
+            // The system may or may not show its dialog again, so offer settings too.
+            LocationAccess.DENIED -> MessageCard(
+                title = stringResource(R.string.permission_title),
+                body = stringResource(R.string.permission_body),
+                action = stringResource(R.string.permission_allow),
+                onAction = permission.request,
+                secondaryAction = stringResource(R.string.open_app_settings),
+                onSecondaryAction = permission.openAppSettings,
             )
             LocationAccess.BLOCKED -> MessageCard(
                 title = stringResource(R.string.permission_blocked_title),
@@ -152,6 +178,8 @@ private fun StatusPanel(
                 body = stringResource(R.string.approximate_body),
                 action = stringResource(R.string.approximate_allow),
                 onAction = permission.request,
+                secondaryAction = stringResource(R.string.open_app_settings),
+                onSecondaryAction = permission.openAppSettings,
             )
             LocationAccess.APPROXIMATE_BLOCKED -> MessageCard(
                 title = stringResource(R.string.approximate_title),

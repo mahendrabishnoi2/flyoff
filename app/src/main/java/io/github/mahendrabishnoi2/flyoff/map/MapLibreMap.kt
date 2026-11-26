@@ -53,6 +53,7 @@ private const val FOLLOW_TRANSITION_MS = 750L
  * @param following whether the camera follows the dot. A map gesture turns it off
  *   and reports that through [onFollowingChange].
  * @param ornamentInsets space to keep free around the map's own attribution, logo and compass.
+ * @param onLoadFailed called with MapLibre's message if the bundled style can't be loaded.
  */
 @Composable
 fun MapLibreMap(
@@ -61,6 +62,7 @@ fun MapLibreMap(
     following: Boolean,
     onFollowingChange: (Boolean) -> Unit,
     ornamentInsets: MapInsets,
+    onLoadFailed: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -71,6 +73,8 @@ fun MapLibreMap(
     var nativeMap by remember(mapView) { mutableStateOf<NativeMap?>(null) }
     var styleLoaded by remember(mapView) { mutableStateOf(false) }
     val currentOnFollowingChange by rememberUpdatedState(onFollowingChange)
+    val currentOnLoadFailed by rememberUpdatedState(onLoadFailed)
+    val currentFollowing by rememberUpdatedState(following)
 
     // Compose forgets effects in reverse order, so the observer below is removed
     // (and the map paused and stopped) before this effect destroys the map.
@@ -112,6 +116,12 @@ fun MapLibreMap(
         }
     }
 
+    DisposableEffect(mapView) {
+        val listener = MapView.OnDidFailLoadingMapListener { message -> currentOnLoadFailed(message) }
+        mapView.addOnDidFailLoadingMapListener(listener)
+        onDispose { mapView.removeOnDidFailLoadingMapListener(listener) }
+    }
+
     LaunchedEffect(mapView) {
         mapView.getMapAsync { map ->
             nativeMap = map
@@ -137,35 +147,50 @@ fun MapLibreMap(
         }
     }
 
-    // Effects run in this order, so the dot is enabled before it is moved or followed.
-    LaunchedEffect(styleLoaded, showLocation) {
-        val component = nativeMap?.locationComponent ?: return@LaunchedEffect
-        if (styleLoaded) setLocationShown(context, component, showLocation)
-    }
-
-    LaunchedEffect(styleLoaded, showLocation, location) {
-        val component = nativeMap?.locationComponent ?: return@LaunchedEffect
-        if (location == null || !component.isReady()) return@LaunchedEffect
-        component.renderMode = if (location.toGpsFix().showsBearing()) RenderMode.GPS else RenderMode.NORMAL
-        component.forceLocationUpdate(location)
-    }
-
-    LaunchedEffect(styleLoaded, showLocation, following) {
+    // One effect sets the dot and camera from the current inputs, so nothing
+    // depends on effect order. Each step only changes what differs.
+    LaunchedEffect(styleLoaded, showLocation, location, following) {
         val map = nativeMap ?: return@LaunchedEffect
-        val component = map.locationComponent
-        if (!component.isReady()) return@LaunchedEffect
-        if (following) {
-            val zoom = followZoom(map.cameraPosition.zoom)
-            component.setCameraMode(CameraMode.TRACKING, FOLLOW_TRANSITION_MS, zoom, null, null, null)
-        } else if (component.cameraMode != CameraMode.NONE) {
-            component.cameraMode = CameraMode.NONE
-        }
+        if (styleLoaded) syncLocation(context, map, showLocation, location) { currentFollowing }
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
 }
 
-private fun LocationComponent.isReady() = isLocationComponentActivated && isLocationComponentEnabled
+/**
+ * Shows [location] as the dot, or hides the dot when there is no current fix (so
+ * a fix from before a restart or a GPS outage is never shown as current), and
+ * applies the follow mode. [following] is read last, so a "Follow me" switched
+ * off by a map gesture a moment ago is not switched back on.
+ */
+private fun syncLocation(
+    context: Context,
+    map: NativeMap,
+    showLocation: Boolean,
+    location: Location?,
+    following: () -> Boolean,
+) {
+    val component = map.locationComponent
+    if (!component.isLocationComponentActivated) return
+    val granted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
+    val visible = showLocation && granted && location != null
+    if (component.isLocationComponentEnabled != visible) component.isLocationComponentEnabled = visible
+    if (!visible) return
+
+    val arrowNow = component.renderMode == RenderMode.GPS
+    val arrow = location.toGpsFix().showsBearing(shownNow = arrowNow)
+    if (arrow != arrowNow) component.renderMode = if (arrow) RenderMode.GPS else RenderMode.NORMAL
+    component.forceLocationUpdate(location)
+
+    val tracking = component.cameraMode != CameraMode.NONE
+    if (following() && !tracking) {
+        val zoom = followZoom(map.cameraPosition.zoom)
+        component.setCameraMode(CameraMode.TRACKING, FOLLOW_TRANSITION_MS, zoom, null, null, null)
+    } else if (!following() && tracking) {
+        component.cameraMode = CameraMode.NONE
+    }
+}
 
 /**
  * Sets up the dot without MapLibre's own location engine: positions come from
@@ -183,19 +208,12 @@ private fun activateLocationComponent(
             .useDefaultLocationEngine(false)
             .build(),
     )
+    // Called when a map gesture ends tracking; mode changes we make ourselves are ignored.
     component.addOnCameraTrackingChangedListener(object : OnCameraTrackingChangedListener {
         override fun onCameraTrackingDismissed() = onTrackingDismissed()
 
-        override fun onCameraTrackingChanged(currentMode: Int) {
-            if (currentMode == CameraMode.NONE) onTrackingDismissed()
-        }
+        override fun onCameraTrackingChanged(currentMode: Int) = Unit
     })
-}
-
-private fun setLocationShown(context: Context, component: LocationComponent, show: Boolean) {
-    val granted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED
-    component.isLocationComponentEnabled = show && granted
 }
 
 private fun createMapView(context: Context, savedState: Bundle?): MapView {

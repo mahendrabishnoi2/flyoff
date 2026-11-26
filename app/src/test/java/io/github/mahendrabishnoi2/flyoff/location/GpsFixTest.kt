@@ -39,11 +39,19 @@ class GpsFixTest {
     }
 
     @Test
-    fun `bearing arrow only when moving with a course`() {
-        assertTrue(cruise.showsBearing())
-        assertTrue(cruise.copy(speedMetersPerSecond = MOVING_SPEED_METERS_PER_SECOND).showsBearing())
-        assertFalse(cruise.copy(speedMetersPerSecond = 0.5f).showsBearing())
-        assertFalse(cruise.copy(speedMetersPerSecond = null).showsBearing())
-        assertFalse(cruise.copy(hasBearing = false).showsBearing())
+    fun `arrow appears only when moving with a course`() {
+        assertTrue(cruise.showsBearing(shownNow = false))
+        assertTrue(cruise.copy(speedMetersPerSecond = ARROW_ON_SPEED).showsBearing(shownNow = false))
+        assertFalse(cruise.copy(speedMetersPerSecond = 1.0f).showsBearing(shownNow = false))
+        assertFalse(cruise.copy(speedMetersPerSecond = null).showsBearing(shownNow = false))
+        assertFalse(cruise.copy(hasBearing = false).showsBearing(shownNow = false))
+    }
+
+    @Test
+    fun `arrow stays until well below walking pace`() {
+        assertTrue(cruise.copy(speedMetersPerSecond = 1.0f).showsBearing(shownNow = true))
+        assertTrue(cruise.copy(speedMetersPerSecond = ARROW_OFF_SPEED).showsBearing(shownNow = true))
+        assertFalse(cruise.copy(speedMetersPerSecond = 0.4f).showsBearing(shownNow = true))
+        assertFalse(cruise.copy(hasBearing = false).showsBearing(shownNow = true))
     }
 }

@@ -44,12 +44,20 @@ fun rememberLocationPermission(): LocationPermission {
     val context = LocalContext.current
     val activity = LocalActivity.current
     var askedBefore by rememberSaveable { mutableStateOf(false) }
+    var blockConfirmed by rememberSaveable { mutableStateOf(false) }
+    var rationaleBeforeRequest by rememberSaveable { mutableStateOf(false) }
     var readCount by remember { mutableIntStateOf(0) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         askedBefore = true
+        blockConfirmed = blockedAfterRequest(
+            blockedBefore = blockConfirmed,
+            rationaleBefore = rationaleBeforeRequest,
+            fineGrantedAfter = context.isGranted(Manifest.permission.ACCESS_FINE_LOCATION),
+            rationaleAfter = activity.fineRationale(),
+        )
         readCount++
     }
     LifecycleResumeEffect(Unit) {
@@ -57,28 +65,30 @@ fun rememberLocationPermission(): LocationPermission {
         onPauseOrDispose { }
     }
 
-    val access = remember(readCount, askedBefore) {
-        readLocationAccess(context, activity, askedBefore)
+    val access = remember(readCount, askedBefore, blockConfirmed) {
+        locationAccess(
+            fineGranted = context.isGranted(Manifest.permission.ACCESS_FINE_LOCATION),
+            coarseGranted = context.isGranted(Manifest.permission.ACCESS_COARSE_LOCATION),
+            shouldShowRationale = activity.fineRationale(),
+            askedBefore = askedBefore,
+            blockConfirmed = blockConfirmed,
+        )
     }
     return LocationPermission(
         access = access,
-        request = { launcher.launch(LOCATION_PERMISSIONS) },
+        request = {
+            rationaleBeforeRequest = activity.fineRationale()
+            launcher.launch(LOCATION_PERMISSIONS)
+        },
         openAppSettings = { openAppSettings(context) },
     )
 }
 
-private fun readLocationAccess(context: Context, activity: Activity?, askedBefore: Boolean): LocationAccess {
-    fun granted(permission: String) =
-        context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-    return locationAccess(
-        fineGranted = granted(Manifest.permission.ACCESS_FINE_LOCATION),
-        coarseGranted = granted(Manifest.permission.ACCESS_COARSE_LOCATION),
-        shouldShowRationale = activity?.shouldShowRequestPermissionRationale(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) ?: false,
-        askedBefore = askedBefore,
-    )
-}
+private fun Context.isGranted(permission: String) =
+    checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+private fun Activity?.fineRationale(): Boolean =
+    this?.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) ?: false
 
 private fun openAppSettings(context: Context) {
     val intent = Intent(

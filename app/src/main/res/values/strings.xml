@@ -22,4 +22,10 @@
     <string name="gps_waiting_body">Without internet, the first fix can take several minutes. Get a fix before boarding, and keep the phone near a window.</string>
     <string name="gps_fix_title">GPS</string>
     <string name="follow_me">Follow me</string>
+    <string name="no_gps_title">No GPS receiver</string>
+    <string name="no_gps_body">This device has no GPS receiver, so Flyoff can\'t show your position. The map still works.</string>
+
+    <!-- Map -->
+    <string name="map_error_title">The map didn\'t load</string>
+    <string name="map_error_body">Flyoff couldn\'t read its built-in map (%1$s). This is a bug; please report it.</string>
 </resources>

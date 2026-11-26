@@ -8,16 +8,20 @@ enum class LocationAccess {
     /** Only approximate location; asking for precise may still show the system dialog. */
     APPROXIMATE,
 
-    /** Only approximate location, and the system won't ask again: send the user to settings. */
+    /** Only approximate location, and the user has refused precise for good: send them to settings. */
     APPROXIMATE_BLOCKED,
 
     /** Never asked in this session, and no grant yet. */
     NOT_ASKED,
 
-    /** Denied, but the system will still show its dialog: explain, then ask again. */
+    /**
+     * Not granted, and it isn't certain the system will refuse to ask: the user denied
+     * once, dismissed the dialog, or blocked it in an earlier session. Offer both
+     * "ask again" and app settings.
+     */
     DENIED,
 
-    /** Denied with "don't ask again" (or denied twice): only app settings can change it. */
+    /** The user answered "don't ask again" (or denied twice): only app settings can change it. */
     BLOCKED,
 }
 
@@ -25,23 +29,40 @@ enum class LocationAccess {
  * Maps the platform's permission state to a [LocationAccess].
  *
  * `shouldShowRationale` is `shouldShowRequestPermissionRationale(ACCESS_FINE_LOCATION)`.
- * It is false both before the first request and after "don't ask again", so
- * `askedBefore` (a request finished in this session) tells the two apart. After a
- * fresh start a blocked permission looks like [NOT_ASKED]; the next request then
- * returns at once without a dialog and the state becomes blocked.
+ * It is false before the first request, after "don't ask again", and also after
+ * the user dismisses the dialog on Android 11+, so false alone never means
+ * blocked. [blockConfirmed] comes from [blockedAfterRequest].
  */
 fun locationAccess(
     fineGranted: Boolean,
     coarseGranted: Boolean,
     shouldShowRationale: Boolean,
     askedBefore: Boolean,
+    blockConfirmed: Boolean,
 ): LocationAccess {
-    val systemWillAsk = shouldShowRationale || !askedBefore
+    val blocked = blockConfirmed && !shouldShowRationale
     return when {
         fineGranted -> LocationAccess.PRECISE
-        coarseGranted -> if (systemWillAsk) LocationAccess.APPROXIMATE else LocationAccess.APPROXIMATE_BLOCKED
+        coarseGranted -> if (blocked) LocationAccess.APPROXIMATE_BLOCKED else LocationAccess.APPROXIMATE
         shouldShowRationale -> LocationAccess.DENIED
-        askedBefore -> LocationAccess.BLOCKED
+        blocked -> LocationAccess.BLOCKED
+        askedBefore -> LocationAccess.DENIED
         else -> LocationAccess.NOT_ASKED
     }
 }
+
+/**
+ * Whether precise location is known to be blocked after a request returns.
+ *
+ * Only one sequence proves it: the rationale flag was true before the request (so
+ * the system showed its dialog) and false after it, with precise still not granted;
+ * that is the user answering "deny" the second time. A dismissed dialog leaves the
+ * flag unchanged, and a request that returns at once without a dialog starts with
+ * it false, so neither counts.
+ */
+fun blockedAfterRequest(
+    blockedBefore: Boolean,
+    rationaleBefore: Boolean,
+    fineGrantedAfter: Boolean,
+    rationaleAfter: Boolean,
+): Boolean = !fineGrantedAfter && !rationaleAfter && (rationaleBefore || blockedBefore)
