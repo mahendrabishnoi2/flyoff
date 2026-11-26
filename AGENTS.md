@@ -12,12 +12,31 @@ Flyoff is a free, open-source Android app that shows the plane's live GPS positi
 
 **Current state:** research is done. Milestone 1 (map and GPS dot) is next. There is no app code yet.
 
-## How we work
+## How we work: verify everything
 
-- **Small steps.** One focused change per PR or commit series. Don't build ahead of the current milestone, and don't add speculative abstractions.
+Your job is not only to write code but to **prove it works**. A change counts as done when its checks have been run, they pass, and the evidence is in your report.
+
+1. **Decide how you'll prove it before you start.** Write down the checks that will show the change works: the milestone's "done when" items, the tests you'll add, and the commands you'll run.
+2. **Make the smallest change** that can pass those checks. One focused change per commit series. Don't build ahead of the current milestone, and don't add speculative abstractions.
+3. **Run the checks and read the output.** Don't assume. A build that compiled isn't proof that the feature works.
+4. **Report with evidence:** the commands you ran and their results (pass/fail counts, sizes, screenshots). List anything you could **not** verify, with numbered manual steps the maintainer can follow on a phone. Never write "should work" in place of a check.
+
+**Verification ladder.** Use the highest level available:
+
+| Level | How | When |
+|---|---|---|
+| Build and static checks | `./gradlew assembleDebug lintDebug` | Every change |
+| Unit tests | `./gradlew testDebugUnitTest`. For pure logic (geodesy, ETA, parsing), write the test first. | Every change that touches logic |
+| Visual check | Screenshots (headless render, emulator, or device) attached to the PR | Any UI or map style change |
+| On a device | Emulator or real phone | GPS, permissions, airplane mode, background behaviour |
+
+Cloud agent containers have **no emulator** (no `/dev/kvm`). Device-level behaviour there is *unverified* until the maintainer runs the manual steps. Say so plainly.
+
+**Other rules**
+
 - **Keep it simple.** Prefer the platform and a few well-known libraries over frameworks. Add a dependency only when it clearly earns its place, and say why in the PR.
 - **Write our own code.** We don't vendor or copy other projects' code. Reading permissively licensed projects for reference is fine. If a snippet is ever copied, keep its licence notice and name the source in the commit. Never copy from repositories that have no licence.
-- **Leave it working.** Every change must build and pass the tests. If you can't verify something (e.g. real GPS in flight), say so in the PR instead of claiming it works.
+- **Leave it working.** Every commit must build and pass the tests.
 - **Update the docs** (roadmap status, this file) when a milestone finishes or a decision changes.
 
 ## Tech stack
@@ -27,7 +46,7 @@ Flyoff is a free, open-source Android app that shows the plane's live GPS positi
 | Language | Kotlin |
 | UI | Jetpack Compose, Material 3; single activity |
 | Build | Gradle with Kotlin DSL and a version catalog (`gradle/libs.versions.toml`) |
-| Map engine | MapLibre Native Android (≥ 11.8 for PMTiles) |
+| Map engine | MapLibre Native Android ≥ 13.7.1 (needed to load `pmtiles://asset://` from the app's assets) |
 | Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map as a PMTiles asset; route downloads through MapLibre's offline downloader |
 | Location | Android location APIs; a foreground service for in-flight tracking (from Milestone 3) |
 | Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time |
@@ -73,7 +92,7 @@ The research measurement scripts are in `docs/research/scripts/`. Run them with 
 - **OpenFreeMap downloads** must stay within its terms: each download is started by the user and is at most **3,000 tiles and 50 MB**, uses at most **4 parallel requests**, and sends a **unique User-Agent** naming Flyoff. Split long routes into several downloads.
 - **Don't hotlink Protomaps builds** (`build.protomaps.com`) from the app.
 - **Don't use these flight-data sources:** OpenSky, FlightAware AeroAPI, Aviationstack, adsbdb routes, OpenFlights routes. The reasons are in the research doc.
-- **Always show map attribution:** "© OpenMapTiles © OpenStreetMap contributors" on the map (it may collapse to an (i) button). The full list goes on the credits screen.
+- **Always show map attribution:** "OpenFreeMap © OpenMapTiles © OpenStreetMap contributors" on the map (it may collapse to an (i) button). The full list goes on the credits screen.
 - **Flight numbers are only suggestions.** VRS data is keyed by callsign, and many airlines use callsigns that differ from the flight number. Never present a match as certain.
 - **Add a new data source only after checking its licence.** Record it in `docs/research/data-sources-validation.md`.
 
@@ -88,7 +107,7 @@ The research measurement scripts are in `docs/research/scripts/`. Run them with 
 
 - Unit-test pure logic: geodesy, ETA, route matching, data parsing.
 - From Milestone 2, use the in-app **flight simulator** (a fake GPS track along the route) to test tracking features without flying.
-- Report honestly which checks were run on a device or emulator and which weren't.
+- See "How we work: verify everything" for what must be checked and how to report it.
 
 ## Git
 

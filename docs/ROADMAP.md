@@ -34,18 +34,20 @@ Background research: [data sources and licensing](research/data-sources-validati
 
 **Scope:**
 - An Android project in Kotlin, Jetpack Compose and Gradle (Kotlin DSL, version catalog).
-- MapLibre Native Android (version 11.8 or later, for PMTiles support).
+- MapLibre Native Android (version 13.7.1 or later, which can load a PMTiles file from the app's assets).
 - A world map up to zoom 5 (about 15 MB), cut from OpenFreeMap's weekly PMTiles file and bundled as an app asset (`pmtiles://asset://`).
 - One simple map style (OpenMapTiles schema), with Latin fonts only.
 - A location-permission request, and a live GPS dot that follows the user.
-- The map credit "© OpenMapTiles © OpenStreetMap contributors" shown on the map.
+- The map credit "OpenFreeMap © OpenMapTiles © OpenStreetMap contributors" shown on the map.
 - A script, kept in the repo, that rebuilds the bundled map file.
 
 **Not in this milestone:** airports, routes, downloads, background tracking.
 
 **Done when:**
-- With airplane mode on, the app opens, shows the world map and shows a moving GPS dot on a walk or drive.
-- The release APK is 30 MB or less.
+- `./gradlew assembleDebug lintDebug testDebugUnitTest` pass.
+- A screenshot shows the bundled world map rendering with our style (headless render or emulator).
+- The arm64-v8a release APK is 30 MB or less. A universal APK carries MapLibre for four CPU types, so it's measured per CPU type.
+- **On a real phone (maintainer):** with airplane mode on, the app opens, shows the world map and shows a moving GPS dot on a walk or drive.
 
 ## Milestone 2: Flight setup and stats
 

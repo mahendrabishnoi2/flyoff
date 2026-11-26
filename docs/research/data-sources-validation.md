@@ -165,7 +165,7 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 ## 6. Map engine: MapLibre Native Android
 
 - **Licence:** BSD 2-Clause.
-- **PMTiles:** supported since **11.8.0** according to the changelog (the docs say 11.7.0). Accepted URLs: `pmtiles://https://…`, `pmtiles://file://…` and `pmtiles://asset://…`. Since 13.7.1, files in the app package are read by byte range.
+- **PMTiles:** supported since **11.8.0** according to the changelog (the docs say 11.7.0). Accepted URLs: `pmtiles://https://…` and `pmtiles://file://…`. **`pmtiles://asset://…` (a file inside the app package) needs 13.7.1 or later**, per the MapLibre skill `maplibre-native-gl-js-parity`.
 - **Offline limitation:** *"PMTiles sources do not support offline pack downloads or caching."* So the corridor download uses the normal offline downloader (`OfflineManager`) on standard XYZ/TileJSON tiles, and the bundled world map is a PMTiles asset.
 - **Size** (measured from the 13.7.1 package): `libmaplibre.so` is 13.0 MB on arm64 (9.6 MB on armv7), about 4–4.6 MB compressed. Expect **about 5 MB of download and about 13 MB on the device** per CPU type when shipped as an app bundle.
 
@@ -224,8 +224,8 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 
 | Part | Choice | Licence and credit |
 |---|---|---|
-| Map engine | MapLibre Native Android ≥ 11.8 | BSD-2 |
-| Bundled world map | OpenFreeMap PMTiles extract, zoom 0–5 (about 15 MB) | ODbL Produced Work: *"© OpenMapTiles © OpenStreetMap contributors"* |
+| Map engine | MapLibre Native Android ≥ 13.7.1 | BSD-2 |
+| Bundled world map | OpenFreeMap PMTiles extract, zoom 0–5 (about 15 MB) | ODbL Produced Work: *"OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"* |
 | Corridor download | OpenFreeMap public tiles through the offline downloader, zoom 8 by default, within the terms limits | Same as above |
 | Routes | VRS standing data in a compact custom format, updated weekly from our own GitHub Release | CC0 (credit is optional but nice) |
 | Airports | OurAirports, scheduled-only, 7 columns | Unlicense / public domain |
