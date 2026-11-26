@@ -109,6 +109,18 @@ Background research: [data sources and licensing](research/data-sources-validati
 - GPX/KML track export (no free Android app has this).
 - Dark "cockpit" map theme.
 
+## Agent skills
+
+Skills are added at the milestone that needs them, not all at once. How to add them is in [AGENTS.md](../AGENTS.md#agent-skills).
+
+| When | Skill | Source |
+|---|---|---|
+| ✅ Milestone 1 (installed) | `maplibre-native-gl-js-parity`, `android-permissions-security`, `android-ux` | MapLibre, Google, rcosteira79 |
+| Milestone 2 | `testing-setup` (tell it not to add Hilt), `android-testing` | Google, rcosteira79 |
+| Milestone 3 | `android-profiler` (battery, wake locks), `jetpack-compose-performance` | Google |
+| Release | `play-policy-insights` (review its scripts first), `fdroid-publishing` | Google, ItsAhadun |
+| Later | Wear OS skills | Google |
+
 ## Later (ideas, not committed)
 
 - Terrain and height above ground (Copernicus GLO-30, with the required notices).

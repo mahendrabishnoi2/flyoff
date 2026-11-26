@@ -47,6 +47,19 @@ The Android project doesn't exist yet. Once Milestone 1 creates it, the standard
 
 The research measurement scripts are in `docs/research/scripts/`. Run them with `python3 -I`.
 
+## Agent skills
+
+- Skills live in `.agents/skills/` and work with any harness that reads that folder (OpenCode, Pi, Codex and others). `.claude` is a symlink to `.agents`, so Claude Code sees the same skills. `CLAUDE.md` imports this file.
+- They are installed with the [`skills` CLI](https://skills.sh) and pinned in `skills-lock.json`. Upstream licences are kept in `.agents/licenses/`.
+- **Add a skill only when the current milestone needs it.** Read its `SKILL.md` before committing it, and skip anything that runs scripts or fetches remote code. To add one:
+
+  ```bash
+  DISABLE_TELEMETRY=1 npx skills add <owner/repo> --skill <name> -a universal --copy -y
+  ```
+
+  Then add its upstream licence to `.agents/licenses/` and to the table there.
+- Planned additions by milestone are listed in [docs/ROADMAP.md](docs/ROADMAP.md#agent-skills).
+
 ## Data and licensing rules (must follow)
 
 - **Never use `tile.openstreetmap.org`** or any other OSM-run tile server. Their policy forbids offline use and bulk downloads.
