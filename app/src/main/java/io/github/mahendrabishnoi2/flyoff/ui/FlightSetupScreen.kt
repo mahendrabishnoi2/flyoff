@@ -108,7 +108,12 @@ fun FlightSetupScreen(
         query = ""
         val other = if (active == Endpoint.ORIGIN) Endpoint.DESTINATION else Endpoint.ORIGIN
         val otherEmpty = if (other == Endpoint.ORIGIN) picked.origin == null else picked.destination == null
-        if (otherEmpty) active = other else keyboard?.hide()
+        if (otherEmpty) {
+            active = other
+            searchFocus.requestFocus()
+        } else {
+            keyboard?.hide()
+        }
     }
 
     fun select(end: Endpoint) {

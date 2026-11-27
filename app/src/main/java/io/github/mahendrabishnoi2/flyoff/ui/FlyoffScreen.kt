@@ -234,14 +234,15 @@ fun FlyoffScreen() {
                 },
                 onSimulatorStop = { simulation = null },
                 modifier = Modifier
-                    .widthIn(max = if (landscape) 420.dp else 560.dp)
+                    .widthIn(max = if (landscape) 480.dp else 560.dp)
                     .fillMaxWidth()
                     .heightIn(max = panelMaxHeight)
                     .onGloballyPositioned { coordinates ->
                         val r = coordinates.boundsInRoot()
                         panel = PanelBounds(r.left.roundToInt(), r.top.roundToInt(), r.right.roundToInt(), r.bottom.roundToInt())
                     }
-                    .verticalScroll(rememberScrollState()),
+                    // Anchored at the bottom: if the panel must scroll, the flight card stays in view.
+                    .verticalScroll(rememberScrollState(), reverseScrolling = true),
             )
         }
         if (setupOpen) {
