@@ -20,8 +20,8 @@ Background research: [data sources and licensing](research/data-sources-validati
 | 0 | Research and validation | ✅ Done |
 | 1 | Map and GPS dot | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m1-phone-test.md) pending |
 | 2 | Flight setup and stats | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m2-phone-test.md) pending |
-| 3 | Reliable tracking | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m3-phone-test.md) pending |
-| 4 | Route map download | Planned |
+| 3 | Reliable tracking | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m3-phone-test.md) pending |
+| 4 | Route map download | 🚧 In progress |
 | 5 | Flight-number suggestion | Planned |
 | 6 | Extras | Planned |
 | – | Later | Ideas |
