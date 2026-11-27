@@ -111,6 +111,17 @@ Background research: [data sources and licensing](research/data-sources-validati
 - GPX/KML track export (no free Android app has this).
 - Dark "cockpit" map theme.
 
+## Before the first public release
+
+- **A credits screen** reachable from the app, listing every bundled data source and font with its licence:
+  - OpenFreeMap, OpenMapTiles and © OpenStreetMap contributors (ODbL) for the map
+  - OurAirports (public domain)
+  - timezone-boundary-builder (ODbL, © OpenStreetMap contributors), which the airport list is derived from
+  - Noto Sans (SIL OFL)
+  - VRS standing data (CC0), once Milestone 5 adds it
+
+  The on-map credit already covers OpenStreetMap. The rest is in `assets/airports/NOTICE.txt` and `docs/research/data-sources-validation.md`, but users can't see it yet.
+
 ## Agent skills
 
 Skills are added at the milestone that needs them, not all at once. **When you start a milestone, install the skills listed for it** before writing code. The full procedure is in [AGENTS.md](../AGENTS.md#agent-skills).
