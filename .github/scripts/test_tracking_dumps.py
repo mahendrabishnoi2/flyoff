@@ -1,7 +1,8 @@
-"""Tests for tracking_dumps.py on dumpsys excerpts written to look like API 35's.
+"""Tests for tracking_dumps.py on dumpsys excerpts.
 
-The excerpts are from memory of the AOSP formats (ActiveServices / ServiceRecord.dump and
-NotificationRecord.dump), not captured from a device: CI's emulator run is what confirms them.
+The excerpts are cut from real API 35 emulator dumps (CI run 45943161253:
+dumpsys-14-services.txt and dumpsys-14-notification.txt), with uninteresting
+lines left out. The other app's records are made up in the same shape.
 
 Run: python3 -I -m unittest discover -s .github/scripts -p 'test_*.py'
 """
@@ -20,18 +21,19 @@ SERVICES_HEAD = """ACTIVITY MANAGER SERVICES (dumpsys activity services)
   User 0 active services:
 """
 
-FOREGROUND = """  * ServiceRecord{9f3d1c2 u0 io.github.mahendrabishnoi2.flyoff/.tracking.FlightTrackingService c:io.github.mahendrabishnoi2.flyoff}
+FOREGROUND = """  * ServiceRecord{3296b26 u0 io.github.mahendrabishnoi2.flyoff/.tracking.FlightTrackingService c:io.github.mahendrabishnoi2.flyoff}
     intent={act=io.github.mahendrabishnoi2.flyoff.action.START_TRACKING cmp=io.github.mahendrabishnoi2.flyoff/.tracking.FlightTrackingService}
     packageName=io.github.mahendrabishnoi2.flyoff
     processName=io.github.mahendrabishnoi2.flyoff
-    permission=null
-    app=ProcessRecord{b1c0d2e 12345:io.github.mahendrabishnoi2.flyoff/u0a209}
-    allowWhileInUsePermissionInFgs=true
+    targetSdkVersion=37
+    app=ProcessRecord{b068a6a 2677:io.github.mahendrabishnoi2.flyoff/u0a209}
+    getFgsAllowStart=PROC_STATE_TOP
     startForegroundCount=1
-    isForeground=true foregroundId=1 types=0x00000008 foregroundNoti=Notification(channel=flight_tracking shortcut=null contentView=null vibrate=null sound=null defaults=0x0 flags=0x6a color=0x00000000 actions=1 vis=PRIVATE)
-    createTime=-12s345ms startingBgTimeout=--
-    lastActivity=-12s300ms restartTime=-12s300ms createdFromFg=true
+    isForeground=true foregroundId=1 types=0x00000008 foregroundNoti=Notification(channel=flight_tracking shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE color=0x00000000 category=service groupKey=silent actions=1 vis=PRIVATE)
+    createTime=-3s44ms startingBgTimeout=--
+    lastActivity=-3s43ms restartTime=-3s43ms createdFromFg=true
     startRequested=true delayedStop=false stopIfKilled=true callStart=true lastStartId=1
+ startCommandResult=2
 """
 
 OTHER_APP = """  * ServiceRecord{1234567 u0 com.example.other/.tracking.FlightTrackingService}
@@ -75,22 +77,33 @@ class ServiceTest(unittest.TestCase):
 
 NOTIFICATIONS = """Current Notification Manager state:
   Notification List:
-    NotificationRecord(0x0e1a2b3c: pkg=io.github.mahendrabishnoi2.flyoff user=UserHandle{0} id=1 tag=null importance=2 key=0|io.github.mahendrabishnoi2.flyoff|1|null|10209: Notification(channel=flight_tracking shortcut=null contentView=null vibrate=null sound=null defaults=0x0 flags=0x6a color=0x00000000 actions=1 vis=PRIVATE))
+    NotificationRecord(0x0f455a79: pkg=android user=UserHandle{-1} id=2147483647 tag=ranker_group importance=2 key=-1|android|2147483647|ranker_group|1000|ranker_group: Notification(channel=DEVELOPER shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT|LOCAL_ONLY|GROUP_SUMMARY|AUTOGROUP_SUMMARY color=0x00000000 vis=PRIVATE))
+      uid=1000 userId=-1
+      opPkg=android
+      effectiveNotificationChannel=NotificationChannel{mId='DEVELOPER', mName=Developer messages, mDescription=, mImportance=2}
+    NotificationRecord(0x094f3b3b: pkg=io.github.mahendrabishnoi2.flyoff user=UserHandle{0} id=1 tag=null importance=2 key=0|io.github.mahendrabishnoi2.flyoff|1|null|10209: Notification(channel=flight_tracking shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE color=0x00000000 category=service groupKey=silent actions=1 vis=PRIVATE))
       uid=10209 userId=0
       opPkg=io.github.mahendrabishnoi2.flyoff
-      icon=Icon(typ=RESOURCE pkg=io.github.mahendrabishnoi2.flyoff id=0x7f080004)
+      icon=Icon(typ=RESOURCE pkg=io.github.mahendrabishnoi2.flyoff id=0x7f060008)
       flags=ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE
+      originalFlags=ONGOING_EVENT|ONLY_ALERT_ONCE|FOREGROUND_SERVICE
+      key=0|io.github.mahendrabishnoi2.flyoff|1|null|10209
       notification=
-        extras={
-          android.title=String (Tracking LHR → JFK)
-          android.text=String (Waiting for GPS…)
-        }
-    NotificationRecord(0x0aaaaaaa: pkg=com.android.systemui user=UserHandle{0} id=7 tag=null importance=2 key=0|com.android.systemui|7|null|10100: Notification(channel=BAT shortcut=null contentView=null vibrate=null sound=null defaults=0x0 flags=0x8 color=0x00000000 vis=PRIVATE))
+            actions={
+                [0] "Stop tracking" -> PendingIntent{52dfb1: PendingIntentRecord{f3113b2 io.github.mahendrabishnoi2.flyoff startService}}
+              }
+            extras={
+                android.title=String (Tracking LHR → JFK)
+                android.text=String (5,548 km to go · ETA 06:50 EST)
+            }
+      mImportance=LOW
+      effectiveNotificationChannel=NotificationChannel{mId='flight_tracking', mName=Flight tracking, mDescription=hasDescription , mImportance=2}
+    NotificationRecord(0x0aaaaaaa: pkg=com.android.systemui user=UserHandle{0} id=7 tag=null importance=2 key=0|com.android.systemui|7|null|10100: Notification(channel=BAT shortcut=null contentView=null vibrate=null sound=null defaults=0 flags=ONGOING_EVENT color=0x00000000 vis=PRIVATE))
       uid=10100 userId=0
       notification=
-        extras={
-          android.title=String (Tracking LHR → JFK)
-        }
+            extras={
+                android.title=String (Tracking LHR → JFK)
+            }
 """
 
 EMPTY = """Current Notification Manager state:
@@ -108,6 +121,10 @@ class NotificationTest(unittest.TestCase):
 
     def test_with_its_title(self):
         self.assertEqual(1, self.count(NOTIFICATIONS, "Tracking LHR → JFK"))
+        self.assertEqual(1, self.count(NOTIFICATIONS, "Tracking LHR .{1,8} JFK"))
+
+    def test_with_its_text(self):
+        self.assertEqual(1, self.count(NOTIFICATIONS, r"android\.text=String \([0-9,]+ km to go"))
 
     def test_a_title_in_another_record_doesnt_count(self):
         self.assertEqual(0, self.count(NOTIFICATIONS, "Tracking SYD → LAX"))

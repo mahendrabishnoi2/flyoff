@@ -1,6 +1,7 @@
 """Count an app's GPS listeners in `adb shell dumpsys location` output (stdlib only).
 
-Reads the "gps provider:" block under "Location Providers:" and counts the
+Reads the "gps provider:" block under "Location Providers:" (headed
+"gps provider [mock]:" while a test provider stands in for GPS) and counts the
 lines in its "listeners:" list whose identity (uid/package[tag]/id) names the
 package. The history and event log further down are ignored, so the count
 is what the app has registered now.
@@ -10,8 +11,9 @@ Prints the count. Exits 2 when the file has no gps provider block, so a failed
 dump never reads as "no listener".
 
 With --max-interval it also exits 3 when one of the package's GPS listeners is
-throttled: marked as in the background or not permitted ("{bg}", "{na}",
-"(inactive)"), or with an interval longer than SECONDS. Android throttles a
+throttled: marked as in the background or not permitted ("{bg}", "{na}" or
+"{bg, na}" after the identity), inactive (" (inactive)" after the whole
+registration), or with an interval longer than SECONDS. Android throttles a
 background app's location to a few fixes an hour; a foreground service is
 exempt, so a tracking listener must show neither.
 """
@@ -21,7 +23,12 @@ import sys
 UNITS = {"d": 86400.0, "h": 3600.0, "m": 60.0, "s": 1.0, "ms": 0.001}
 DURATION = re.compile(r"(\d+)(ms|d|h|m|s)")
 INTERVAL = re.compile(r"Request\[@\+?([0-9dhms]+)")
-THROTTLED = re.compile(r"[{\[(]\s*(?:bg|na|inactive)\b")
+# AOSP's LocationProviderManager.Registration.toString() prints the flags as a
+# set ("{bg, na}") between the identity and the request, and
+# ListenerMultiplexer.dump() appends " (inactive)" after the whole line.
+FLAGS = re.compile(r"^\S+ \{(?:bg|na)(?:, (?:bg|na))?\} ")
+INACTIVE = re.compile(r"\(inactive\)\s*$")
+GPS_HEADERS = ("gps provider:", "gps provider [mock]:")
 
 
 def indent(line):
@@ -44,9 +51,10 @@ def interval_seconds(line):
 
 def throttled(line, max_interval):
     """Why the listener [line] is throttled, or None when it isn't."""
-    head = line.split("Request[")[0]
-    if THROTTLED.search(head):
-        return "marked as background or inactive"
+    if FLAGS.search(line):
+        return "marked as background or not permitted"
+    if INACTIVE.search(line):
+        return "inactive"
     seconds = interval_seconds(line)
     if seconds is None:
         return "no interval"
@@ -75,7 +83,7 @@ def gps_listener_lines(lines, package):
         if in_gps and depth <= provider_indent:
             in_gps = in_listeners = False
         if not in_gps:
-            if text == "gps provider:":
+            if text in GPS_HEADERS:
                 in_gps, provider_indent, found = True, depth, []
             continue
         if in_listeners and depth <= listeners_indent:
