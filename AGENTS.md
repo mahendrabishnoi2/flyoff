@@ -49,7 +49,7 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 | Map engine | MapLibre Native Android, the **`android-sdk-opengl`** artifact, ≥ 13.7.1 (needed to load `pmtiles://asset://`). The plain `android-sdk` artifact uses Vulkan and declares Vulkan as *required*, which would hide the app on phones without it. MapLibre's `2026.x-globe` releases come from a feature branch, so stay on the stable 13.x line. |
 | Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map `app/src/main/assets/basemap/world.pmtiles` (zoom 0–5, 7.3 MB, stored uncompressed in the APK); style `assets/style/flyoff.json`; fonts `assets/fonts/`. Route downloads go through MapLibre's offline downloader (Milestone 4). |
 | Location | Android location APIs; a foreground service for in-flight tracking (from Milestone 3) |
-| Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time |
+| Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time. Bundled airports `app/src/main/assets/airports/airports.tsv` (4,077 airports with IANA time zones from timezone-boundary-builder, ODbL; see `NOTICE.txt` next to it). |
 | Android | Package `io.github.mahendrabishnoi2.flyoff`, minSdk 26, targetSdk 37, compileSdk 37.2 (Compose 1.13 needs 37.1+). AGP 9 with its built-in Kotlin support. All versions live in `gradle/libs.versions.toml`. |
 
 **Size budget:** each per-CPU-type release APK must be 30 MB or less (arm64-v8a is 20.4 MB now). Release builds produce per-ABI APKs and a universal APK in `app/build/outputs/apk/release/`.
@@ -62,6 +62,8 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 ./gradlew assembleRelease -Pflyoff.testSigning        # installable release build, signed with the debug key (testing only)
 tools/basemap/build_basemap.sh                        # rebuild the bundled map + fonts (needs curl, python3)
 python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
+python3 -I tools/airports/build_airports.py              # rebuild the bundled airports.tsv (downloads ~73 MB to ~/.cache/flyoff/airports)
+python3 -I -m unittest discover -s tools/airports -p 'test_*.py'
 NODE_PATH=$(npm root -g) node tools/basemap/preview/render.js [outdir]   # headless map screenshots (Playwright + Chromium)
 python3 -I tools/basemap/tile_stats.py app/src/main/assets/basemap/world.pmtiles   # map size per zoom/layer
 ```

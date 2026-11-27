@@ -1,0 +1,16 @@
+airports.tsv: airports with scheduled service and their time zones
+
+Contains information from:
+
+- OurAirports (https://ourairports.com/, https://github.com/davidmegginson/ourairports-data),
+  released into the public domain (The Unlicense).
+
+- timezone-boundary-builder (https://github.com/evansiroky/timezone-boundary-builder),
+  release 2026f, © OpenStreetMap contributors, which is made available under the
+  Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/
+
+Each airport's time zone comes from that data, so airports.tsv is a derivative
+database and is made available under the same Open Database License (ODbL) 1.0.
+
+The file is rebuilt from the pinned sources by tools/airports/build_airports.py in
+Flyoff's source repository.
