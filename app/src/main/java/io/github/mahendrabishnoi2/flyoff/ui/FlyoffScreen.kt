@@ -157,7 +157,9 @@ fun FlyoffScreen() {
 
     // The last fix (simulated or real) and its age. With a flight set, a fix older than 10 s
     // gives way to a dead-reckoning estimate toward the destination, moving every second.
-    val realFixAge = rememberFixAgeMillis(gps.location, enabled = plan != null && simulated == null)
+    val realFixAge = rememberFixAgeMillis(gps.location, enabled = plan != null && simulated == null) { fix, age ->
+        plan != null && DeadReckoning.estimate(plan.destinationLatLon, fix.toPosition(), age) != null
+    }
     val lastFix = simulated?.position ?: gps.location?.toPosition()
     val millisSinceFix = simulated?.millisSinceFix ?: realFixAge
     val estimate = if (plan != null && lastFix != null && DeadReckoning.isStale(millisSinceFix)) {
@@ -183,8 +185,9 @@ fun FlyoffScreen() {
         plan?.let { MapRoute(it.routePoints, it.origin.iata, it.destination.iata) }
     }
 
-    // "GPS ready" before take-off: satellites are listened to only while this line can show.
-    val readinessShown = plan != null && !simulating && precise && gps.hasReceiver && gps.providerEnabled
+    // "GPS ready" before take-off: satellites are listened to only while this line shows (an
+    // estimate takes its place).
+    val readinessShown = plan != null && !simulating && precise && gps.hasReceiver && gps.providerEnabled && estimate == null
     val satellites = rememberGnssSatellites(active = readinessShown)
     val locale = LocalConfiguration.current.locales[0]
     val statusLine = when {

@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
@@ -25,15 +26,18 @@ private const val ESTIMATE_TICK_MS = 1_000L
  * How old [location] is, in milliseconds of `elapsedRealtime` (from the fix's
  * `elapsedRealtimeNanos`, so changes to the phone's clock don't matter); 0 without a fix.
  *
- * It doesn't tick while the fix is fresh: one wake-up when it turns stale, then once a second so
- * an estimate can move, only while [enabled] (a flight is set) and the app is visible. Fixes
- * arriving keep resetting it, so with a working GPS nothing extra recomposes.
+ * It doesn't tick while the fix is fresh: one wake-up when it turns stale (so "GPS ready" can
+ * give way), then once a second only while [moving] says something on screen moves with the age
+ * (an estimated position), and only while [enabled] (a flight is set) and the app is visible.
+ * Fixes arriving keep resetting it, so with a working GPS, or on the ground where nothing can be
+ * estimated, nothing extra recomposes.
  */
 @Composable
-fun rememberFixAgeMillis(location: Location?, enabled: Boolean): Long {
+fun rememberFixAgeMillis(location: Location?, enabled: Boolean, moving: (Location, Long) -> Boolean): Long {
     var nowNanos by remember { mutableLongStateOf(SystemClock.elapsedRealtimeNanos()) }
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val visible = lifecycleState.isAtLeast(Lifecycle.State.STARTED)
+    val currentMoving by rememberUpdatedState(moving)
     LaunchedEffect(location, enabled, visible) {
         nowNanos = SystemClock.elapsedRealtimeNanos()
         if (location == null || !enabled || !visible) return@LaunchedEffect
@@ -41,6 +45,7 @@ fun rememberFixAgeMillis(location: Location?, enabled: Boolean): Long {
         if (age < DeadReckoning.STALE_AFTER_MILLIS) delay(DeadReckoning.STALE_AFTER_MILLIS - age)
         while (true) {
             nowNanos = SystemClock.elapsedRealtimeNanos()
+            if (!currentMoving(location, (nowNanos - location.elapsedRealtimeNanos) / 1_000_000)) break
             delay(ESTIMATE_TICK_MS)
         }
     }
