@@ -2,6 +2,7 @@ package io.github.mahendrabishnoi2.flyoff.map
 
 import io.github.mahendrabishnoi2.flyoff.geo.LatLon
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.exp
 import kotlin.math.ln
@@ -80,14 +81,58 @@ fun fitCamera(
 fun routePadding(widthPx: Int, heightPx: Int, panel: PanelBounds?, safe: MapInsets, margin: Int): MapInsets {
     val base = MapInsets(safe.left + margin, safe.top + margin, safe.right + margin, safe.bottom + margin)
     if (panel == null) return base
+    return when (freeSide(widthPx, heightPx, panel)) {
+        FreeSide.ABOVE -> base.copy(bottom = max(base.bottom, heightPx - panel.top + margin))
+        FreeSide.RIGHT -> base.copy(left = max(base.left, panel.right + margin))
+        FreeSide.LEFT -> base.copy(right = max(base.right, widthPx - panel.left + margin))
+    }
+}
+
+/**
+ * Margins for MapLibre's logo and attribution (bottom left) and compass (top right), so they
+ * stay in the free map area and can always be seen and tapped: above a bottom panel, or beside
+ * a side panel at the bottom of the screen (never pushed up under the status bar).
+ */
+fun ornamentInsets(widthPx: Int, heightPx: Int, panel: PanelBounds?, safe: MapInsets): MapInsets {
+    if (panel == null) return safe
+    return when (freeSide(widthPx, heightPx, panel)) {
+        FreeSide.ABOVE -> safe.copy(bottom = max(safe.bottom, heightPx - panel.top))
+        FreeSide.RIGHT -> safe.copy(left = max(safe.left, panel.right))
+        // The panel is on the right: the bottom-left corner is already free.
+        FreeSide.LEFT -> safe
+    }
+}
+
+/** Which part of the screen the map shows in: above the panel or beside it. */
+enum class FreeSide { ABOVE, LEFT, RIGHT }
+
+/** The largest free area next to [panel]: above it, or to its left or right. */
+fun freeSide(widthPx: Int, heightPx: Int, panel: PanelBounds): FreeSide {
     val above = panel.top.toLong() * widthPx
     val leftOf = panel.left.toLong() * heightPx
     val rightOf = (widthPx - panel.right).toLong() * heightPx
     return when (maxOf(above, leftOf, rightOf)) {
-        above -> base.copy(bottom = max(base.bottom, heightPx - panel.top + margin))
-        rightOf -> base.copy(left = max(base.left, panel.right + margin))
-        else -> base.copy(right = max(base.right, widthPx - panel.left + margin))
+        above -> FreeSide.ABOVE
+        rightOf -> FreeSide.RIGHT
+        else -> FreeSide.LEFT
     }
+}
+
+/** What a route fit was worked out for. */
+data class FitRequest(val points: List<LatLon>, val widthPx: Int, val heightPx: Int, val padding: MapInsets)
+
+/**
+ * Whether the camera should be fitted again for [current], after last fitting for [previous]
+ * (null: not fitted yet). A new route or view size refits; padding only when a side changed by
+ * more than [thresholdPx], so a stat that wraps to a second line doesn't make the map jump.
+ */
+fun needsRefit(previous: FitRequest?, current: FitRequest, thresholdPx: Int): Boolean {
+    if (previous == null) return true
+    if (previous.points != current.points) return true
+    if (previous.widthPx != current.widthPx || previous.heightPx != current.heightPx) return true
+    val a = previous.padding
+    val b = current.padding
+    return maxOf(abs(a.left - b.left), abs(a.top - b.top), abs(a.right - b.right), abs(a.bottom - b.bottom)) > thresholdPx
 }
 
 private fun mercatorY(latitude: Double): Double {

@@ -3,6 +3,7 @@ package io.github.mahendrabishnoi2.flyoff.map
 import io.github.mahendrabishnoi2.flyoff.geo.Geodesy
 import io.github.mahendrabishnoi2.flyoff.geo.LatLon
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -115,6 +116,49 @@ class RouteCameraTest {
 
         val right = PanelBounds(left = 1300, top = 200, right = 2200, bottom = 1080)
         assertEquals(MapInsets(left = 20, top = 20, right = 920, bottom = 20), routePadding(2200, 1080, right, MapInsets(), margin = 20))
+    }
+
+    @Test
+    fun `ornaments sit above a bottom panel`() {
+        val panel = PanelBounds(left = 16, top = 1400, right = 1064, bottom = 1980)
+        assertEquals(MapInsets(left = 0, top = 60, right = 0, bottom = 600), ornamentInsets(1080, 2000, panel, MapInsets(top = 60, bottom = 40)))
+    }
+
+    @Test
+    fun `ornaments sit beside a side panel, at the bottom`() {
+        // Landscape: the logo and attribution go right of the panel, not up under the status bar.
+        val left = PanelBounds(left = 40, top = 100, right = 1200, bottom = 1040)
+        assertEquals(MapInsets(left = 1200, top = 60, right = 0, bottom = 40), ornamentInsets(2400, 1080, left, MapInsets(top = 60, bottom = 40)))
+        // Right-to-left: the panel is on the right and the bottom-left corner is free.
+        val right = PanelBounds(left = 1200, top = 100, right = 2360, bottom = 1040)
+        assertEquals(MapInsets(left = 0, top = 60, right = 0, bottom = 40), ornamentInsets(2400, 1080, right, MapInsets(top = 60, bottom = 40)))
+    }
+
+    @Test
+    fun `no panel leaves ornaments in the safe area`() {
+        assertEquals(MapInsets(5, 60, 5, 40), ornamentInsets(1080, 2000, null, MapInsets(5, 60, 5, 40)))
+    }
+
+    private val route = listOf(LatLon(0.0, 0.0), LatLon(1.0, 1.0))
+    private val fitted = FitRequest(route, 1080, 2000, MapInsets(32, 92, 32, 632))
+
+    @Test
+    fun `the first fit always happens`() {
+        assertTrue(needsRefit(null, fitted, thresholdPx = 100))
+    }
+
+    @Test
+    fun `small padding changes don't refit`() {
+        assertFalse(needsRefit(fitted, fitted, thresholdPx = 100))
+        assertFalse(needsRefit(fitted, fitted.copy(padding = MapInsets(32, 92, 32, 700)), thresholdPx = 100))
+    }
+
+    @Test
+    fun `a new route, view size or a big padding change refits`() {
+        assertTrue(needsRefit(fitted, fitted.copy(points = route.reversed()), thresholdPx = 100))
+        assertTrue(needsRefit(fitted, fitted.copy(widthPx = 2000, heightPx = 1080), thresholdPx = 100))
+        assertTrue(needsRefit(fitted, fitted.copy(padding = MapInsets(32, 92, 32, 300)), thresholdPx = 100))
+        assertTrue(needsRefit(fitted, fitted.copy(padding = MapInsets(900, 92, 32, 632)), thresholdPx = 100))
     }
 
     @Test
