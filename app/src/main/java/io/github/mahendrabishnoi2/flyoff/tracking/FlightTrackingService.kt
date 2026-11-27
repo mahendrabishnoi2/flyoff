@@ -22,6 +22,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import io.github.mahendrabishnoi2.flyoff.MainActivity
 import io.github.mahendrabishnoi2.flyoff.R
+import io.github.mahendrabishnoi2.flyoff.download.LandingRule
+import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.TrackDecimator
 import io.github.mahendrabishnoi2.flyoff.flight.TrackPoint
@@ -69,6 +71,9 @@ class FlightTrackingService : Service() {
     private lateinit var trackFile: TrackFile
     private val decimator = TrackDecimator()
     private var flight: TrackedFlight? = null
+
+    /** Whether this tracking session has recorded the landing ([LandingRule]) already. */
+    private var landed = false
     private var jobs: List<Job> = emptyList()
 
     private val listener = object : LocationListener {
@@ -83,6 +88,7 @@ class FlightTrackingService : Service() {
             if (decimator.accept(point)) {
                 Tracker.onPoint(point)
                 Tracker.appendLater(trackFile, point)
+                checkLanded(point)
             }
         }
 
@@ -93,6 +99,17 @@ class FlightTrackingService : Service() {
         // Before Android 11 the platform interface has no default methods.
         @Deprecated("Deprecated in Android 10; still called on older versions.")
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+    }
+
+    /**
+     * At the first recorded point near the destination ([LandingRule]), stores the landing time
+     * with the flight's route maps, which are then deleted 3 days later.
+     */
+    private fun checkLanded(point: TrackPoint) {
+        val tracked = flight ?: return
+        if (landed || !LandingRule.isLanded(point.latLon, tracked.origin, tracked.destination)) return
+        landed = true
+        RouteMaps.markLanded(this, tracked.codes.origin, tracked.codes.destination, point.timeMillis)
     }
 
     override fun onCreate() {
@@ -158,6 +175,7 @@ class FlightTrackingService : Service() {
         jobs.forEach { it.cancel() }
         locationManager.removeUpdates(listener)
         flight = requested
+        landed = false
         decimator.reset()
         jobs = listOf(
             scope.launch {

@@ -6,6 +6,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
 import io.github.mahendrabishnoi2.flyoff.ui.FlyoffScreen
 import io.github.mahendrabishnoi2.flyoff.ui.theme.FlyoffTheme
 
@@ -16,6 +17,8 @@ class MainActivity : ComponentActivity() {
         val lightBars = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = lightBars, navigationBarStyle = lightBars)
         super.onCreate(savedInstanceState)
+        // MapLibre stays offline, with Flyoff's HTTP client, except during a route map download.
+        RouteMaps.init(this)
         setContent {
             FlyoffTheme {
                 FlyoffScreen()

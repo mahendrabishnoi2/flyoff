@@ -106,4 +106,69 @@
 
     <!-- Flight simulator: GPS gaps -->
     <string name="sim_gps_gaps">GPS gaps</string>
+    <!-- Route map downloads (Milestone 4). %1$s etc. are sizes such as "34 MB". -->
+    <string name="route_map_title">Route map</string>
+    <string name="route_map_ready">Ready for offline ✓</string>
+    <string name="route_map_planning">Working out the route map size…</string>
+    <string name="route_map_summary_one">More map detail along your route: up to %1$s, one download.</string>
+    <plurals name="route_map_summary_parts">
+        <item quantity="one">More map detail along your route: up to %1$s in %2$d download.</item>
+        <item quantity="other">More map detail along your route: up to %1$s in %2$d downloads, one tap each.</item>
+    </plurals>
+    <plurals name="route_map_parts_done">
+        <item quantity="one">%1$d of %2$d part downloaded.</item>
+        <item quantity="other">%1$d of %2$d parts downloaded.</item>
+    </plurals>
+    <string name="download_unfinished">The last download stopped before it finished (Flyoff was closed). Download it again to continue where it stopped.</string>
+    <string name="route_map_wifi_only">Downloads on Wi-Fi only.</string>
+    <string name="route_map_wifi_or_mobile">Downloads on Wi-Fi or mobile data.</string>
+    <string name="download_route_map">Download route map (up to %1$s)</string>
+    <string name="download_route_part">Part %1$d of %2$d · up to %3$s</string>
+    <string name="detailed_map_summary">Detailed map (zoom 9): up to %1$s, Wi-Fi only.</string>
+    <plurals name="detailed_map_summary_parts">
+        <item quantity="one">Detailed map (zoom 9): up to %1$s in %2$d download, Wi-Fi only.</item>
+        <item quantity="other">Detailed map (zoom 9): up to %1$s in %2$d downloads, Wi-Fi only.</item>
+    </plurals>
+    <string name="download_detailed_map">Download detailed map (up to %1$s)</string>
+    <string name="download_detailed_part">Detailed part %1$d of %2$d · up to %3$s</string>
+    <string name="detailed_map_ready">Detailed map downloaded.</string>
+    <string name="downloading_route_map">Downloading route map</string>
+    <string name="downloading_route_part">Downloading route map · part %1$d of %2$d</string>
+    <string name="downloading_detailed_map">Downloading detailed map</string>
+    <string name="downloading_detailed_part">Downloading detailed map · part %1$d of %2$d</string>
+    <string name="download_progress">%1$s · %2$s of up to %3$s</string>
+    <string name="download_keep_open">Keep Flyoff open until it finishes.</string>
+    <string name="download_retrying">Waiting for the network…</string>
+    <string name="download_other_flight">Another flight\'s map is downloading.</string>
+    <string name="cancel">Cancel</string>
+    <string name="stored_maps">Stored maps</string>
+    <string name="replace_maps">Replace maps</string>
+    <string name="problem_wifi_required">Not on Wi-Fi. Connect to Wi-Fi, or allow mobile data for route maps in Stored maps (the detailed map always needs Wi-Fi).</string>
+    <string name="problem_no_connection">Couldn\'t reach OpenFreeMap. Check the connection and try again.</string>
+    <string name="problem_over_limit">This download needed more than OpenFreeMap allows for one download (3,000 tiles or 50 MB), so Flyoff stopped and deleted it.</string>
+    <string name="problem_build_gone">OpenFreeMap no longer serves the map version this flight\'s maps came from. Replace them to download the current version.</string>
+    <string name="problem_storage">The map couldn\'t be stored on this phone.</string>
+    <string name="problem_other_version">These maps were planned by another version of Flyoff. Replace them to download this flight again.</string>
+
+    <!-- Stored maps screen -->
+    <string name="stored_maps_total">Total: %1$s</string>
+    <string name="stored_maps_empty">No maps downloaded yet. Set up a flight and download its route map from the flight panel.</string>
+    <string name="use_mobile_data">Use mobile data for route maps</string>
+    <string name="use_mobile_data_body">The detailed map always waits for Wi-Fi.</string>
+    <plurals name="stored_route_parts">
+        <item quantity="one">Route map · %1$d of %2$d part</item>
+        <item quantity="other">Route map · %1$d of %2$d parts</item>
+    </plurals>
+    <plurals name="stored_detailed_parts">
+        <item quantity="one">Detailed map · %1$d of %2$d part</item>
+        <item quantity="other">Detailed map · %1$d of %2$d parts</item>
+    </plurals>
+    <string name="stored_size_date">%1$s · downloaded %2$s</string>
+    <string name="stored_deleted_on">Landed; deleted on %1$s.</string>
+    <string name="stored_kept">Kept until you delete it.</string>
+    <string name="stored_downloading">Downloading…</string>
+    <string name="delete">Delete</string>
+    <string name="delete_maps_title">Delete the maps for %1$s?</string>
+    <string name="delete_maps_body">You can download them again on Wi-Fi.</string>
+    <string name="stored_maps_rule">Flyoff deletes a flight\'s maps 3 days after it lands. A flight counts as landed when tracking records a position within 30 km of the destination. Maps of flights Flyoff didn\'t track to the destination stay until you delete them.</string>
 </resources>
