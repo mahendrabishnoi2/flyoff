@@ -71,6 +71,11 @@ class UiFindTest(unittest.TestCase):
         self.assertEqual((0, "726 2163"), self.run_main("center", self.dump, "^Pause$")[:2])
         self.assertEqual((0, "900 2290"), self.run_main("center", self.dump, "^300 times real time$")[:2])
 
+    def test_height_of_the_first_match(self):
+        self.assertEqual((0, "56"), self.run_main("height", self.dump, "^Follow me$")[:2])
+        self.assertEqual((0, "126"), self.run_main("height", self.dump, "^Pause$")[:2])
+        self.assertEqual(1, self.run_main("height", self.dump, "Simulated position")[0])
+
     def test_a_result_row_not_the_search_field(self):
         # The field also says LHR; the row is found by its description.
         self.assertEqual((0, "540 685"), self.run_main("center", self.results, "^LHR, ")[:2])

@@ -279,6 +279,11 @@ no_crash "simulator rotate"
 wait_for 09-sim-rotated "^Resume$" 10
 expect 09-sim-rotated "^Simulated position"
 shot 09-sim-rotated
+# The panel is taller than the landscape screen; only its cards may scroll out of
+# view, not the "Follow me" chip above them (CI run 45927068621 clipped it to 24 of 53 px).
+tall=$(python3 -I "$SCRIPTS/ui_find.py" height "$OUT/08-sim-paused.xml" "^Follow me$") || fail "no 'Follow me' in 08-sim-paused"
+wide=$(python3 -I "$SCRIPTS/ui_find.py" height "$OUT/09-sim-rotated.xml" "^Follow me$") || fail "no 'Follow me' in landscape (09-sim-rotated)"
+[ "$wide" -ge $((tall - 2)) ] || fail "'Follow me' is cut off in landscape ($wide of $tall px, 09-sim-rotated)"
 adb shell settings put system user_rotation 0
 sleep 4
 wait_for 09-sim-back "^Resume$" 10

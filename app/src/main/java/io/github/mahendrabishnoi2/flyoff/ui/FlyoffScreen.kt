@@ -251,9 +251,7 @@ fun FlyoffScreen() {
                     .onGloballyPositioned { coordinates ->
                         val r = coordinates.boundsInRoot()
                         panel = PanelBounds(r.left.roundToInt(), r.top.roundToInt(), r.right.roundToInt(), r.bottom.roundToInt())
-                    }
-                    // Anchored at the bottom: if the panel must scroll, the flight card stays in view.
-                    .verticalScroll(rememberScrollState(), reverseScrolling = true),
+                    },
             )
         }
         // After the panel, so the panel can never draw over it; placed in the free map area.
@@ -333,21 +331,8 @@ private fun StatusPanel(
 ) {
     val context = LocalContext.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
-        if (mapError != null) {
-            MessageCard(
-                title = stringResource(R.string.map_error_title),
-                body = stringResource(R.string.map_error_body, mapError),
-            )
-        }
-        val airportState = airports.state
-        if (airportState is AirportsState.Failed) {
-            MessageCard(
-                title = stringResource(R.string.airports_error_title),
-                body = stringResource(R.string.airports_error_body, airportState.message),
-                action = stringResource(R.string.retry),
-                onAction = airports.retry,
-            )
-        }
+        // The buttons stay put; if the panel is taller than the screen (landscape), only the
+        // cards below them scroll, anchored at the bottom so the flight card stays in view.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (plan == null && !flightPending) {
                 FilledTonalButton(onClick = onSetUpFlight) { Text(stringResource(R.string.set_up_flight)) }
@@ -360,22 +345,45 @@ private fun StatusPanel(
                 )
             }
         }
-        // While simulating, the real GPS is off and its state doesn't matter.
-        if (!simulating) {
-            GpsStatus(permission, gps, showFix = plan == null, context = context)
-        }
-        if (plan != null) {
-            FlightCard(
-                plan = plan,
-                stats = stats,
-                eta = eta,
-                simulator = simulator,
-                onChange = onSetUpFlight,
-                onSimulate = onSimulate,
-                onSimulatorPlayPause = onSimulatorPlayPause,
-                onSimulatorSpeed = onSimulatorSpeed,
-                onSimulatorStop = onSimulatorStop,
-            )
+        Column(
+            Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState(), reverseScrolling = true),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            if (mapError != null) {
+                MessageCard(
+                    title = stringResource(R.string.map_error_title),
+                    body = stringResource(R.string.map_error_body, mapError),
+                )
+            }
+            val airportState = airports.state
+            if (airportState is AirportsState.Failed) {
+                MessageCard(
+                    title = stringResource(R.string.airports_error_title),
+                    body = stringResource(R.string.airports_error_body, airportState.message),
+                    action = stringResource(R.string.retry),
+                    onAction = airports.retry,
+                )
+            }
+            // While simulating, the real GPS is off and its state doesn't matter.
+            if (!simulating) {
+                GpsStatus(permission, gps, showFix = plan == null, context = context)
+            }
+            if (plan != null) {
+                FlightCard(
+                    plan = plan,
+                    stats = stats,
+                    eta = eta,
+                    simulator = simulator,
+                    onChange = onSetUpFlight,
+                    onSimulate = onSimulate,
+                    onSimulatorPlayPause = onSimulatorPlayPause,
+                    onSimulatorSpeed = onSimulatorSpeed,
+                    onSimulatorStop = onSimulatorStop,
+                )
+            }
         }
     }
 }

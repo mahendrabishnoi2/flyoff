@@ -13,6 +13,8 @@ Usage: python3 -I ui_find.py <command> <ui.xml> <regex> [attribute]
   attr    print [attribute], such as checked or enabled, of the control the first
           match belongs to: the nearest checkable or clickable node, itself or an
           ancestor (a Compose chip's label is a child TextView that is never checked)
+  height  print the height in pixels of the first matching node as drawn: a node
+          partly scrolled or clipped out of view reports only its visible part
 
 Exits 1 with a message on stderr when nothing matches, 2 on a bad file.
 """
@@ -60,12 +62,16 @@ def control(root, node):
     return node
 
 
-def center(node):
+def bounds(node):
     m = BOUNDS.fullmatch(node.get("bounds", ""))
     if not m:
         print(f"node has no bounds: {node.attrib}", file=sys.stderr)
         sys.exit(2)
-    x1, y1, x2, y2 = map(int, m.groups())
+    return tuple(map(int, m.groups()))
+
+
+def center(node):
+    x1, y1, x2, y2 = bounds(node)
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
@@ -76,7 +82,7 @@ def number(text):
 
 
 def main(argv):
-    if len(argv) < 4 or argv[1] not in ("has", "center", "number", "attr"):
+    if len(argv) < 4 or argv[1] not in ("has", "center", "number", "attr", "height"):
         print(__doc__, file=sys.stderr)
         return 2
     command, path, pattern = argv[1:4]
@@ -91,6 +97,9 @@ def main(argv):
             print(f"'{pattern}' has no group to read", file=sys.stderr)
             return 2
         print(number(m.group(1)))
+    elif command == "height":
+        _, y1, _, y2 = bounds(node)
+        print(y2 - y1)
     else:
         if len(argv) < 5:
             print("attr needs an attribute name", file=sys.stderr)
