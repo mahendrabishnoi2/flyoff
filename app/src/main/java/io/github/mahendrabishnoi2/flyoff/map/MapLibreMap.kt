@@ -286,17 +286,20 @@ private fun syncLocation(
     }
 }
 
+/** #a1b0c0: a blue-grey that reads as "not live" next to MapLibre's blue dot (#4a90e2). CI looks for it. */
+private const val ESTIMATED_DOT_COLOR = 0xFFA1B0C0.toInt()
+
 /**
  * The dot's two looks. MapLibre's own stale state can't mark an estimate: every
- * `forceLocationUpdate` resets its stale timer, and the estimate is fed in every second. So an
- * estimate gets the live options with the stale colours (grey) applied as the normal ones, and no
- * accuracy circle.
+ * `forceLocationUpdate` resets its stale timer, and the estimate is fed in every second. Its
+ * default stale tints are also unset (null), so they wouldn't change the colour anyway. An
+ * estimate gets the live options with the dot and its arrow tinted grey ([ESTIMATED_DOT_COLOR]),
+ * the white ring kept for contrast, and no accuracy circle.
  */
 private class DotStyles(val live: LocationComponentOptions) {
     val estimated: LocationComponentOptions = live.toBuilder()
-        .foregroundTintColor(live.foregroundStaleTintColor())
-        .backgroundTintColor(live.backgroundStaleTintColor())
-        .bearingTintColor(live.foregroundStaleTintColor())
+        .foregroundTintColor(ESTIMATED_DOT_COLOR)
+        .bearingTintColor(ESTIMATED_DOT_COLOR)
         .accuracyAlpha(0f)
         .build()
     var estimatedShown = false
