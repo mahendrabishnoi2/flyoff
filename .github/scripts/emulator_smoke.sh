@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test Flyoff on a running emulator: install, grant location, launch,
-# feed fake GPS fixes, tap "Follow me", rotate, and check for crashes.
+# feed fake GPS fixes, tap "Follow me", rotate, and check for crashes. Then set
+# up a flight (LHR to JFK), run the flight simulator and check its stats, set
+# up a flight across the antimeridian, and simulate without location permission.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
 # Usage: emulator_smoke.sh <debug-apk> <out-dir>
@@ -16,9 +18,60 @@ fail() { echo "FAIL: $*" >&2; adb logcat -d > "$OUT/logcat.txt" || true; exit 1;
 
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; echo "screenshot $1: $(python3 -I "$SCRIPTS/png_colours.py" "$OUT/$1.png") colours"; }
 
-ui() { adb shell uiautomator dump /sdcard/ui.xml > /dev/null; adb shell cat /sdcard/ui.xml > "$OUT/$1.xml"; }
+# Dump the UI to OUT/<name>.xml. uiautomator gives up ("could not get idle
+# state") while the screen keeps changing, so retry, and never read an old dump.
+ui() {
+  local i
+  for i in 1 2 3 4 5; do
+    adb shell rm -f /sdcard/ui.xml
+    adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
+    if adb shell cat /sdcard/ui.xml > "$OUT/$1.xml" 2> /dev/null && grep -q "<hierarchy" "$OUT/$1.xml"; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "could not dump the UI ($1)"
+}
 
 expect_text() { grep -q "$2" "$OUT/$1.xml" || fail "'$2' not on screen ($1)"; }
+
+# The helpers below match a regex against each node's text and content-desc
+# (see ui_find.py); Compose puts a merged element's words in one or the other.
+has() { python3 -I "$SCRIPTS/ui_find.py" has "$OUT/$1.xml" "$2"; }
+
+expect() { has "$1" "$2" || fail "'$2' not on screen ($1)"; }
+
+reject() { if has "$1" "$2"; then fail "'$2' unexpectedly on screen ($1)"; fi; }
+
+# Centre "x y" of the first node matching $2 in dump $1.
+find_xy() { python3 -I "$SCRIPTS/ui_find.py" center "$OUT/$1.xml" "$2" || fail "no '$2' to tap ($1)"; }
+
+tap_xy() { adb shell input tap $1; }
+
+tap() { local xy; xy=$(find_xy "$1" "$2"); tap_xy "$xy"; }
+
+# A number read from the first node matching $2, whose first group is the number.
+read_number() { python3 -I "$SCRIPTS/ui_find.py" number "$OUT/$1.xml" "$2" || fail "no '$2' to read ($1)"; }
+
+# Dump the UI as $1 until something matches $2, for up to $3 seconds (default 20).
+wait_for() {
+  local name="$1" pattern="$2" limit="${3:-20}" start=$SECONDS
+  while true; do
+    ui "$name"
+    if has "$name" "$pattern"; then return 0; fi
+    if ((SECONDS - start >= limit)); then fail "waited ${limit}s for '$pattern' ($name)"; fi
+    sleep 1
+  done
+}
+
+# Pick an airport in the open flight setup: type $2 into the search field, then
+# tap the result row whose description starts with that code.
+pick_airport() {
+  local step="$1" code="$2"
+  adb shell input text "$code"
+  wait_for "$step" "^$code, " 20
+  tap "$step" "^$code, "
+}
 
 reject_text() { if grep -q "$2" "$OUT/$1.xml"; then fail "'$2' unexpectedly on screen ($1)"; fi; }
 
@@ -103,6 +156,120 @@ no_crash "resume"
 ui 05-resumed
 expect_text 05-resumed "GPS alt"
 shot 05-resumed
+
+echo "== Flight setup: LHR to JFK"
+ui 06-before-setup
+# Step 03 turned "Follow me" on; turn it off so the camera shows the whole route.
+if [ "$(python3 -I "$SCRIPTS/ui_find.py" attr "$OUT/06-before-setup.xml" "^Follow me$" checked)" = "true" ]; then
+  tap 06-before-setup "^Follow me$"
+fi
+tap 06-before-setup "^Set up flight$"
+wait_for 06-setup "^From: Choose an airport$"
+pick_airport 06-pick-origin LHR
+wait_for 06-origin-picked "^From: LHR " 10
+pick_airport 06-pick-destination JFK
+wait_for 06-picked "^To: JFK " 10
+tap 06-picked "^Done$"
+wait_for 06-route "^Simulate flight$" 10
+# The header reads "LHR → JFK"; screen readers get the airport names.
+expect 06-route "LHR → JFK|^Flight from London Heathrow"
+expect 06-route "^[0-9,]+ km route$"
+no_crash "flight setup"
+sleep 3 # the camera's fit animation
+shot 06-route
+python3 -I "$SCRIPTS/png_colours.py" "$OUT/06-route.png" 40 > /dev/null
+
+echo "== Flight simulator"
+tap 06-route "^Simulate flight$"
+wait_for 07-sim-ready "^Simulated position" 10
+expect 07-sim-ready "^Start$"
+expect 07-sim-ready "^Remaining: "
+tap 07-sim-ready "^300 times real time$"
+ui 07-sim-300
+expect 07-sim-300 "^Start$"
+# Start, Pause and Resume are one button that keeps its place. While the replay
+# runs the screen changes every second and uiautomator can't dump it, so the
+# button is tapped where it was, and the UI is only read while paused.
+play=$(find_xy 07-sim-300 "^Start$")
+tap_xy "$play"
+sleep 3
+no_crash "simulator start"
+shot 07-sim-start
+tap_xy "$play"
+wait_for 07-sim-paused "^Resume$" 10
+expect 07-sim-paused "^Time left: "
+expect 07-sim-paused "^ETA: [0-9]{2}:[0-9]{2} "
+expect 07-sim-paused "^Speed: [0-9,]+ km/h$"
+reject 07-sim-paused "Waiting for GPS"
+before=$(read_number 07-sim-paused "^Remaining: ([0-9.,]+) km$")
+tap 07-sim-paused "^Resume$"
+sleep 6
+no_crash "simulator running"
+shot 08-sim-later
+tap_xy "$play"
+wait_for 08-sim-paused "^Resume$" 10
+after=$(read_number 08-sim-paused "^Remaining: ([0-9.,]+) km$")
+echo "distance remaining: $before km, then $after km"
+python3 -I -c "import sys; sys.exit(0 if 0 < float(sys.argv[2]) < float(sys.argv[1]) else 1)" "$before" "$after" ||
+  fail "distance remaining didn't go down while simulating ($before km, then $after km)"
+
+echo "== Simulator survives rotation"
+adb shell settings put system user_rotation 1
+sleep 4
+no_crash "simulator rotate"
+wait_for 09-sim-rotated "^Resume$" 10
+expect 09-sim-rotated "^Simulated position"
+shot 09-sim-rotated
+adb shell settings put system user_rotation 0
+sleep 4
+wait_for 09-sim-back "^Resume$" 10
+again=$(read_number 09-sim-back "^Remaining: ([0-9.,]+) km$")
+[ "$again" = "$after" ] || fail "paused replay moved across rotation ($after km, then $again km)"
+tap 09-sim-back "^Stop$"
+wait_for 10-sim-stopped "^Simulate flight$" 10
+reject 10-sim-stopped "^Simulated position"
+no_crash "simulator stop"
+shot 10-sim-stopped
+
+echo "== Flight across the antimeridian: SYD to LAX"
+tap 10-sim-stopped "^Change$"
+wait_for 11-change "^From: LHR " 10
+tap 11-change "^From: "
+sleep 1
+pick_airport 11-pick-origin SYD
+wait_for 11-origin-picked "^From: SYD " 10
+tap 11-origin-picked "^To: "
+sleep 1
+pick_airport 11-pick-destination LAX
+wait_for 11-picked "^To: LAX " 10
+tap 11-picked "^Done$"
+wait_for 11-antimeridian "SYD → LAX|^Flight from Sydney" 10
+no_crash "antimeridian"
+sleep 3
+shot 11-antimeridian
+python3 -I "$SCRIPTS/png_colours.py" "$OUT/11-antimeridian.png" 40 > /dev/null
+
+echo "== Simulator without location permission (and the flight kept across a restart)"
+# Revoking a permission kills the app, so this also restarts it.
+adb shell pm revoke "$PKG" android.permission.ACCESS_FINE_LOCATION
+adb shell pm revoke "$PKG" android.permission.ACCESS_COARSE_LOCATION
+adb shell am start -W -n "$PKG/.MainActivity"
+wait_for 12-restarted "^Simulate flight$" 30
+expect 12-restarted "SYD → LAX|^Flight from Sydney"
+expect 12-restarted "^Allow location$"
+tap 12-restarted "^Simulate flight$"
+wait_for 12-sim-ready "^Start$" 10
+play=$(find_xy 12-sim-ready "^Start$")
+tap_xy "$play"
+sleep 3
+shot 12-sim-no-permission
+tap_xy "$play"
+wait_for 12-sim-paused "^Resume$" 10
+expect 12-sim-paused "^Remaining: [0-9.,]+ km$"
+expect 12-sim-paused "^Simulated position"
+tap 12-sim-paused "^Stop$"
+wait_for 12-sim-stopped "^Simulate flight$" 10
+no_crash "simulator without permission"
 
 adb logcat -d > "$OUT/logcat.txt"
 echo "PASS: all smoke checks"
