@@ -110,6 +110,27 @@ class StatsFormatTest {
     }
 
     @Test
+    fun `progress rounds down so 100 percent means arrived`() {
+        assertEquals("99%", formatProgress(0.9966, us))
+        assertEquals("99%", formatProgress(0.999999, us))
+        assertEquals("42%", formatProgress(0.429, us))
+        assertEquals("100%", formatProgress(1.0, us))
+        assertEquals("0%", formatProgress(-0.01, us))
+        assertEquals("100%", formatProgress(1.2, us))
+    }
+
+    @Test
+    fun `stat columns shrink with the font scale`() {
+        assertEquals(3, statColumns(widthDp = 348f, fontScale = 1f))
+        assertEquals(4, statColumns(widthDp = 416f, fontScale = 1f))
+        assertEquals(6, statColumns(widthDp = 900f, fontScale = 1f))
+        assertEquals(2, statColumns(widthDp = 348f, fontScale = 1.5f))
+        // Never fewer than two: the ETA spans two cells, so it then takes a whole row.
+        assertEquals(2, statColumns(widthDp = 348f, fontScale = 2f))
+        assertEquals(2, statColumns(widthDp = 120f, fontScale = 1f))
+    }
+
+    @Test
     fun `progress is a whole percentage`() {
         assertEquals("42%", formatProgress(0.42, us))
         assertEquals("0%", formatProgress(0.0, us))
