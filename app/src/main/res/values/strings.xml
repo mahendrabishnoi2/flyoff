@@ -50,6 +50,28 @@
     <string name="airports_error_body">Flyoff couldn\'t read its built-in airport list (%1$s). This is a bug; please report it.</string>
     <string name="retry">Try again</string>
 
+    <!-- Flight number suggestion (Milestone 5). Routes are crowd-sourced: always a suggestion, never a fact. -->
+    <string name="flight_number_label">Flight number (optional)</string>
+    <string name="flight_number_placeholder">Such as BA117</string>
+    <string name="clear_flight_number">Clear flight number</string>
+    <string name="flight_number_invalid">Type a flight number such as BA117 or U2 1234, or pick the airports below.</string>
+    <string name="flight_routes_loading">Loading flight routes…</string>
+    <string name="flight_routes_error">Flight numbers can\'t be looked up (%1$s). This is a bug; please report it. Pick the airports below.</string>
+    <string name="flight_not_found">No route found for %1$s. Pick the airports below.</string>
+    <string name="flight_unknown_airports">The route Flyoff has for %1$s (%2$s) uses airports that aren\'t in its list. Pick the airports below.</string>
+    <string name="suggested_route">Suggested route</string>
+    <!-- Airline name and callsign, e.g. "British Airways · BAW117". -->
+    <string name="suggestion_airline">%1$s · %2$s</string>
+    <string name="suggestion_usually_flies">%1$s usually flies</string>
+    <string name="suggestion_route_names">%1$s to %2$s</string>
+    <!-- %2$s is the stops, e.g. "LHR → SIN → SYD". -->
+    <string name="suggestion_stops">%1$s usually flies %2$s. Which leg is yours?</string>
+    <string name="use_this_route">Use this route</string>
+    <string name="use_leg_description">Use the leg from %1$s to %2$s</string>
+    <string name="suggestion_unknown_stops">Not in Flyoff\'s airport list, so not offered: %1$s.</string>
+    <string name="suggestion_note">Routes are crowd-sourced and may be wrong or out of date. Check them against your booking.</string>
+    <string name="suggestion_used">Filled in from %1$s\'s usual route. Check the airports, then tap Done.</string>
+
     <!-- Flight panel -->
     <string name="flight_route">%1$s → %2$s</string>
     <string name="flight_route_description">Flight from %1$s to %2$s</string>
