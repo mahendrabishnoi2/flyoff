@@ -13,6 +13,7 @@ This document records which claims from the earlier research held up, which were
   - **Map tile sizes:** read from the directory of the Protomaps daily build `20261124.pmtiles` (v4.15.2, about 140 GB) using HTTP range requests, so no tiles were downloaded. The script is [`scripts/pmsize.py`](scripts/pmsize.py).
   - **Route data:** counted from a clone of the VRS standing-data repo, commit of 2026-11-25. The script is [`scripts/vrs.py`](scripts/vrs.py).
   - **Airports:** counted from today's OurAirports `airports.csv`.
+  - **OpenFreeMap corridor sizes** (added 2026-11-27): a random sample of 464 tiles downloaded politely from the public server. The script is [`scripts/ofm_corridor_sizes.py`](scripts/ofm_corridor_sizes.py).
 
 ---
 
@@ -179,11 +180,39 @@ Each tile's bytes are counted once, even when several tiles share the same data 
 | Singapore–Sydney (SIN–SYD), mostly sea | 6,294 km | 2–4 MB | 6–8 MB | 13–17 MB |
 | Mumbai–Delhi (BOM–DEL) | 1,137 km | 1–3 MB | 5–7 MB | 12–15 MB |
 
-The ranges come from two ways of counting edge tiles: the lower bound counts tiles whose centre is inside the strip, the upper bound every tile that touches it. Tile counts for the full zoom 6–8 corridor are 65–409. Those are Protomaps sizes; OpenFreeMap tiles use a different schema and were not measured.
+The ranges come from two ways of counting edge tiles: the lower bound counts tiles whose centre is inside the strip, the upper bound every tile that touches it. Tile counts for the full zoom 6–8 corridor are 65–409. Those are Protomaps sizes. OpenFreeMap's own corridor sizes are below; they are larger.
 
 - The earlier "10–40 MB at zoom 6–8" ✓ (we measured 2–32 MB).
 - The earlier "5–30 MB up to zoom 9–10" ✗. Zoom 9 can reach about 90 MB, and zoom 10 about 220 MB.
 - **Decision:** zoom 8 is the default. Zoom 9 is an optional "detailed" download, Wi-Fi only, showing its size first. No zoom 10.
+
+**OpenFreeMap corridor sizes, measured 2026-11-27** (build `20261122_124456_pt`, [`scripts/ofm_corridor_sizes.py`](scripts/ofm_corridor_sizes.py)). The script counts every tile with any part within 175 km of the great circle, then downloads a random sample of up to 40 tiles per zoom per route (464 tiles in all, 4 at a time, User-Agent `Flyoff-research/0.1`, seed 20261127). "Wire" is the gzip-encoded size the server sends; "raw" is the decompressed vector tile. Totals are the full tile count × the sample mean.
+
+| Route | Zoom | Tiles | Wire KB/tile: mean | p90 | max | Raw KB/tile: mean |
+|---|---|---|---|---|---|---|
+| LHR–JFK (5,540 km) | 6 | 33 | 47.0 | 132.5 | 218.4 | 75.2 |
+| | 7 | 88 | 45.5 | 122.6 | 221.0 | 67.6 |
+| | 8 | 279 | 37.9 | 112.2 | 221.5 | 55.4 |
+| | 9 | 967 | 28.2 | 112.3 | 181.9 | 40.9 |
+| FRA–DEL (6,122 km), mostly land | 6 | 31 | 133.2 | 243.4 | 270.0 | 236.6 |
+| | 7 | 83 | 108.4 | 238.5 | 278.6 | 168.8 |
+| | 8 | 256 | 93.9 | 197.3 | 219.4 | 141.2 |
+| | 9 | 863 | 77.6 | 164.7 | 211.6 | 117.4 |
+| SYD–LAX (12,061 km), mostly sea | 6 | 45 | 14.8 | 32.1 | 148.1 | 24.1 |
+| | 7 | 111 | 15.5 | 65.7 | 157.1 | 23.3 |
+| | 8 | 327 | 4.5 | 20.4 | 52.8 | 6.6 |
+| | 9 | 1,062 | 2.7 | 0.4 | 66.7 | 3.9 |
+
+| Route | Zoom 6–8: tiles | wire | raw | Zoom 9 only: tiles | wire | raw |
+|---|---|---|---|---|---|---|
+| LHR–JFK | 400 | 16.1 MB | 23.9 MB | 967 | 27.3 MB | 39.5 MB |
+| FRA–DEL | 370 | 37.2 MB | 57.5 MB | 863 | 67.0 MB | 101.3 MB |
+| SYD–LAX | 483 | 3.8 MB | 5.8 MB | 1,062 | 2.9 MB | 4.2 MB |
+
+- OpenFreeMap corridors are about **1.2–1.6× the Protomaps sizes** above (LHR–JFK zoom 6–8: 16 MB against 7–10 MB; FRA–DEL: 37 MB against 19–32 MB). The tiles carry every `name:xx` translation.
+- **On land the 50 MB limit binds before the 3,000-tile limit.** FRA–DEL zoom 6–8 is only 370 tiles but 37 MB; its zoom-9 layer alone is 67 MB. So long land routes need several downloads at zoom 6–8, and every route except the ocean ones needs several at zoom 9.
+- The sizes are very uneven: sea tiles are a few hundred bytes, city tiles over 200 KB. The tile counts agree with the Protomaps upper bounds (LHR–JFK 400 against 409).
+- **What the app assumes** (`download/TileSizes.kt`): the land-heavy route's mean × 1.5 per zoom, rounded up: 200 KB at zoom 6, 165 KB at zoom 7, 145 KB at zoom 8, 120 KB at zoom 9 (wire bytes). A chunk can lie entirely over land, so the mean of a mixed route would undercount it; the 1.5 headroom covers denser land than FRA–DEL (central Europe, eastern US) and the sampling error of 40 tiles. These figures are close to the pooled p90 of all three routes (159, 162, 163 and 127 KB). They overstate ocean routes several times over, so the app should present its figure as an upper estimate.
 
 ---
 
@@ -267,7 +296,7 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 - Fonts: 1–2 MB
 - App code: a few MB
 
-That matches the earlier 25–30 MB target. Per-flight downloads are 2–32 MB at zoom 8.
+That matches the earlier 25–30 MB target. Per-flight downloads from OpenFreeMap are about 4–37 MB up to zoom 8 (measured 2026-11-27, section 5.2).
 
 **Map attribution (ODbL).** The visible "© OpenStreetMap" credit on the map may collapse to an (i) button after 5 seconds. The full credits screen also lists OpenMapTiles and OpenFreeMap, Natural Earth, VRS standing data, OurAirports, timezone-boundary-builder (© OpenStreetMap contributors, ODbL) and, once terrain is added, Copernicus.
 
@@ -278,7 +307,6 @@ Whether ODbL share-alike applies to vector tiles is unsettled: the OSM Foundatio
 ## 13. Open questions
 
 - Accuracy of VRS routes against real schedules: sample about 200 current flights and measure the hit rate.
-- OpenFreeMap tile sizes for our corridors (the measurements above are for the Protomaps schema).
 - Trademark search for "Flyoff".
 - GPS behaviour in airplane mode on Samsung, Xiaomi and Pixel phones (field test).
 
