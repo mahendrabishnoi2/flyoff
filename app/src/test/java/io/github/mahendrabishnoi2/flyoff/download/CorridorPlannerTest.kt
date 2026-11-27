@@ -24,6 +24,7 @@ import kotlin.math.abs
 class CorridorPlannerTest {
 
     private val h = CorridorGeometry.DEFAULT_HALF_WIDTH_METERS
+    private val sizes = TileSizes.fromBytes(bundledTileSizes)
 
     private val routes = listOf(
         LHR to JFK, FRA to DEL, SYD to LAX, NRT to SFO, JFK to SIN,
@@ -48,7 +49,7 @@ class CorridorPlannerTest {
     fun `every chunk stays within the per-download targets`() {
         for ((a, b) in routes) {
             for (kind in DownloadKind.entries) {
-                val plan = CorridorPlanner.plan(a, b, kind)
+                val plan = CorridorPlanner.plan(a, b, kind, sizes)
                 assertEquals(kind, plan.kind)
                 for (chunk in plan.chunks) {
                     assertEquals(kind.zooms, chunk.zooms)
@@ -64,10 +65,10 @@ class CorridorPlannerTest {
     fun `a chunk's counts are those of its own polygons`() {
         for ((a, b) in listOf(LHR to JFK, SYD to LAX)) {
             for (kind in DownloadKind.entries) {
-                for (chunk in CorridorPlanner.plan(a, b, kind).chunks) {
+                for (chunk in CorridorPlanner.plan(a, b, kind, sizes).chunks) {
                     val perZoom = kind.zooms.map { it to TileCover.tiles(chunk.polygons, it).size }
                     assertEquals(perZoom.sumOf { it.second }, chunk.tileCount)
-                    assertEquals(perZoom.sumOf { (z, n) -> TileSizes.estimateBytes(z, n) }, chunk.estimatedBytes)
+                    assertEquals(kind.zooms.sumOf { sizes.rawBytes(TileCover.tiles(chunk.polygons, it)) }, chunk.estimatedBytes)
                 }
             }
         }
@@ -77,7 +78,7 @@ class CorridorPlannerTest {
     fun `chunks follow each other from origin to destination`() {
         for ((a, b) in routes) {
             for (kind in DownloadKind.entries) {
-                val chunks = CorridorPlanner.plan(a, b, kind).chunks
+                val chunks = CorridorPlanner.plan(a, b, kind, sizes).chunks
                 val length = Geodesy.distanceMeters(a, b)
                 assertEquals(0.0, chunks.first().fromMeters, 0.0)
                 assertEquals(length, chunks.last().toMeters, 1e-6)
@@ -94,7 +95,7 @@ class CorridorPlannerTest {
     fun `the chunks leave no gap in the corridor`() {
         for ((a, b) in listOf(LHR to JFK, FRA to DEL, SYD to LAX, JFK to SIN)) {
             for (kind in DownloadKind.entries) {
-                val chunks = CorridorPlanner.plan(a, b, kind).chunks
+                val chunks = CorridorPlanner.plan(a, b, kind, sizes).chunks
                 val length = Geodesy.distanceMeters(a, b)
                 var along = 0.0
                 while (along <= length) {
@@ -113,9 +114,9 @@ class CorridorPlannerTest {
         // Joining any chunk to the next one would break a target.
         for ((a, b) in listOf(LHR to JFK, FRA to DEL, SYD to LAX)) {
             for (kind in DownloadKind.entries) {
-                val chunks = CorridorPlanner.plan(a, b, kind).chunks
+                val chunks = CorridorPlanner.plan(a, b, kind, sizes).chunks
                 for (i in 0 until chunks.size - 1) {
-                    val joined = CorridorPlanner.chunk(a, b, kind, chunks[i].fromMeters, chunks[i + 1].toMeters, index = 0)
+                    val joined = CorridorPlanner.chunk(a, b, kind, sizes, chunks[i].fromMeters, chunks[i + 1].toMeters, index = 0)
                     assertFalse(
                         "$a-$b $kind chunks $i and ${i + 1} fit together",
                         joined.tileCount <= CorridorPlanner.TARGET_TILES_PER_CHUNK && joined.estimatedBytes <= CorridorPlanner.TARGET_BYTES_PER_CHUNK,
@@ -129,10 +130,10 @@ class CorridorPlannerTest {
     fun `totals count tiles shared by neighbouring chunks once`() {
         for ((a, b) in listOf(LHR to JFK, FRA to DEL, SYD to LAX, JFK to SIN)) {
             for (kind in DownloadKind.entries) {
-                val plan = CorridorPlanner.plan(a, b, kind)
-                val distinct = kind.zooms.associateWith { z -> plan.chunks.flatMapTo(HashSet()) { TileCover.tiles(it.polygons, z) }.size }
-                assertEquals(distinct.values.sum(), plan.totalTiles)
-                assertEquals(distinct.entries.sumOf { (z, n) -> TileSizes.estimateBytes(z, n) }, plan.totalEstimatedBytes)
+                val plan = CorridorPlanner.plan(a, b, kind, sizes)
+                val distinct = kind.zooms.associateWith { z -> plan.chunks.flatMapTo(HashSet()) { TileCover.tiles(it.polygons, z) } }
+                assertEquals(distinct.values.sumOf { it.size }, plan.totalTiles)
+                assertEquals(distinct.values.sumOf { sizes.rawBytes(it) }, plan.totalEstimatedBytes)
                 assertTrue(plan.totalTiles <= plan.chunks.sumOf { it.tileCount })
                 if (plan.chunks.size > 1) assertTrue(plan.totalTiles < plan.chunks.sumOf { it.tileCount })
             }
@@ -142,7 +143,7 @@ class CorridorPlannerTest {
     @Test
     fun `a short route is one chunk`() {
         for (kind in DownloadKind.entries) {
-            val plan = CorridorPlanner.plan(LHR, CDG, kind)
+            val plan = CorridorPlanner.plan(LHR, CDG, kind, sizes)
             assertEquals(1, plan.chunks.size)
             assertEquals(plan.chunks.single().tileCount, plan.totalTiles)
             assertEquals(plan.chunks.single().estimatedBytes, plan.totalEstimatedBytes)
@@ -151,41 +152,43 @@ class CorridorPlannerTest {
 
     @Test
     fun `the whole strip of a single chunk is the route's strip`() {
-        val chunk = CorridorPlanner.plan(LHR, CDG, DownloadKind.ROUTE).chunks.single()
+        val chunk = CorridorPlanner.plan(LHR, CDG, DownloadKind.ROUTE, sizes).chunks.single()
         assertEquals(CorridorGeometry.strip(LHR, CDG), chunk.polygons)
     }
 
     @Test
     fun `a flight back to the same airport is one round chunk`() {
-        val plan = CorridorPlanner.plan(LHR, LHR, DownloadKind.ROUTE)
+        val plan = CorridorPlanner.plan(LHR, LHR, DownloadKind.ROUTE, sizes)
         assertEquals(1, plan.chunks.size)
         assertTrue(insideAny(plan.chunks.single().polygons, Geodesy.destination(LHR, 123.0, h - 5_000.0)))
     }
 
     @Test
-    fun `long land routes need several route chunks and ocean routes fewer`() {
-        val lhrJfk = CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE)
-        val fraDel = CorridorPlanner.plan(FRA, DEL, DownloadKind.ROUTE)
+    fun `land-aware sizes keep ocean routes in few chunks`() {
+        val lhrJfk = CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE, sizes)
+        val fraDel = CorridorPlanner.plan(FRA, DEL, DownloadKind.ROUTE, sizes)
         // The byte estimate binds, not the tile count: zoom 6-8 corridors are only a few hundred tiles.
         assertTrue(lhrJfk.totalTiles in 380..440)
-        assertTrue(lhrJfk.chunks.size in 2..3)
-        assertTrue(fraDel.chunks.size in 2..3)
-        val detailed = CorridorPlanner.plan(LHR, JFK, DownloadKind.DETAILED)
+        assertEquals(1, lhrJfk.chunks.size)
+        assertTrue(fraDel.chunks.size >= 2)
+        val detailed = CorridorPlanner.plan(LHR, JFK, DownloadKind.DETAILED, sizes)
         assertTrue(detailed.totalTiles in 940..1_000)
-        assertTrue(detailed.chunks.size in 3..4)
+        assertEquals(2, detailed.chunks.size)
+        // Flat sizes are far more cautious.
+        assertTrue(CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE, TileSizes.FLAT).chunks.size >= 3)
     }
 
     @Test
     fun `a narrower strip needs fewer tiles`() {
-        val wide = CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE)
-        val narrow = CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE, halfWidthMeters = 50_000.0)
+        val wide = CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE, sizes)
+        val narrow = CorridorPlanner.plan(LHR, JFK, DownloadKind.ROUTE, sizes, halfWidthMeters = 50_000.0)
         assertTrue(narrow.totalTiles < wide.totalTiles)
     }
 
     @Test
     fun `chunk polygons are valid for MapLibre`() {
         for ((a, b) in routes) {
-            for (chunk in CorridorPlanner.plan(a, b, DownloadKind.DETAILED).chunks) {
+            for (chunk in CorridorPlanner.plan(a, b, DownloadKind.DETAILED, sizes).chunks) {
                 for (ring in chunk.polygons) {
                     assertEquals(ring.first(), ring.last())
                     assertTrue(ring.all { it.longitude in -180.0..180.0 && abs(it.latitude) <= WebMercator.MAX_LATITUDE })

@@ -34,7 +34,7 @@ data class CorridorChunk(
     val zooms: IntRange,
     /** Tiles over all [zooms], an upper bound of MapLibre's count for this region. */
     val tileCount: Int,
-    /** Estimated download size in bytes ([TileSizes]). */
+    /** Estimated download size in raw (decompressed) bytes ([TileSizes]). */
     val estimatedBytes: Long,
 )
 
@@ -64,7 +64,10 @@ object CorridorPlanner {
     /** OpenFreeMap's limit on tiles per download. */
     const val MAX_TILES_PER_DOWNLOAD: Int = 3_000
 
-    /** OpenFreeMap's limit on bytes per download (50 MB, read as 50,000,000 bytes). */
+    /**
+     * OpenFreeMap's limit on bytes per download (50 MB, read as 50,000,000 bytes), counted as
+     * raw (decompressed) tile bytes, as MapLibre reports them.
+     */
     const val MAX_BYTES_PER_DOWNLOAD: Long = 50_000_000L
 
     /** The most tiles the planner puts in one chunk. */
@@ -89,24 +92,25 @@ object CorridorPlanner {
         origin: LatLon,
         destination: LatLon,
         kind: DownloadKind,
+        sizes: TileSizes,
         halfWidthMeters: Double = CorridorGeometry.DEFAULT_HALF_WIDTH_METERS,
     ): CorridorPlan {
         val length = Geodesy.distanceMeters(origin, destination)
         val chunks = ArrayList<CorridorChunk>()
         var start = 0.0
         while (true) {
-            val rest = chunk(origin, destination, kind, start, length, chunks.size, halfWidthMeters)
+            val rest = chunk(origin, destination, kind, sizes, start, length, chunks.size, halfWidthMeters)
             if (fits(rest)) {
                 chunks += rest
                 break
             }
             var low = minOf(start + SEARCH_PRECISION_METERS, length)
-            var best = chunk(origin, destination, kind, start, low, chunks.size, halfWidthMeters)
+            var best = chunk(origin, destination, kind, sizes, start, low, chunks.size, halfWidthMeters)
             check(fits(best)) { "a ${SEARCH_PRECISION_METERS / 1000} km piece of the corridor exceeds the per-download targets" }
             var high = length
             while (high - low > SEARCH_PRECISION_METERS) {
                 val mid = (low + high) / 2
-                val candidate = chunk(origin, destination, kind, start, mid, chunks.size, halfWidthMeters)
+                val candidate = chunk(origin, destination, kind, sizes, start, mid, chunks.size, halfWidthMeters)
                 if (fits(candidate)) {
                     low = mid
                     best = candidate
@@ -121,9 +125,9 @@ object CorridorPlanner {
         var totalTiles = 0
         var totalBytes = 0L
         for (zoom in kind.zooms) {
-            val distinct = chunks.flatMapTo(HashSet()) { TileCover.tiles(it.polygons, zoom) }.size
-            totalTiles += distinct
-            totalBytes += TileSizes.estimateBytes(zoom, distinct)
+            val distinct = chunks.flatMapTo(HashSet()) { TileCover.tiles(it.polygons, zoom) }
+            totalTiles += distinct.size
+            totalBytes += sizes.rawBytes(distinct)
         }
         return CorridorPlan(kind, chunks, totalTiles, totalBytes)
     }
@@ -137,6 +141,7 @@ object CorridorPlanner {
         origin: LatLon,
         destination: LatLon,
         kind: DownloadKind,
+        sizes: TileSizes,
         fromMeters: Double,
         toMeters: Double,
         index: Int,
@@ -153,9 +158,9 @@ object CorridorPlanner {
         var tiles = 0
         var bytes = 0L
         for (zoom in kind.zooms) {
-            val count = TileCover.tiles(polygons, zoom).size
-            tiles += count
-            bytes += TileSizes.estimateBytes(zoom, count)
+            val covered = TileCover.tiles(polygons, zoom)
+            tiles += covered.size
+            bytes += sizes.rawBytes(covered)
         }
         return CorridorChunk(index, fromMeters, toMeters, polygons, kind.zooms, tiles, bytes)
     }
