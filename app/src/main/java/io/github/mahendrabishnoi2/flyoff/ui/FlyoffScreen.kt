@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
@@ -65,6 +67,9 @@ import io.github.mahendrabishnoi2.flyoff.map.MapInsets
 import io.github.mahendrabishnoi2.flyoff.map.MapLibreMap
 import io.github.mahendrabishnoi2.flyoff.map.MapRoute
 import io.github.mahendrabishnoi2.flyoff.map.PanelBounds
+import io.github.mahendrabishnoi2.flyoff.map.FreeSide
+import io.github.mahendrabishnoi2.flyoff.map.freeSide
+import io.github.mahendrabishnoi2.flyoff.map.ornamentInsets
 import io.github.mahendrabishnoi2.flyoff.map.routePadding
 import kotlin.math.roundToInt
 
@@ -156,7 +161,7 @@ fun FlyoffScreen() {
         )
         var panel by remember { mutableStateOf<PanelBounds?>(null) }
         // Keep MapLibre's attribution, logo and compass clear of the system bars and of the panel.
-        val ornamentInsets = safe.copy(bottom = panel?.let { heightPx - it.top } ?: safe.bottom)
+        val ornaments = ornamentInsets(widthPx, heightPx, panel, safe)
         val fitPadding = routePadding(widthPx, heightPx, panel, safe, margin = with(density) { 24.dp.roundToPx() })
 
         MapLibreMap(
@@ -168,18 +173,10 @@ fun FlyoffScreen() {
             fitRoute = route != null && !following && !cameraMovedByUser,
             routePadding = fitPadding,
             onCameraMovedByUser = { cameraMovedByUser = true },
-            ornamentInsets = ornamentInsets,
+            ornamentInsets = ornaments,
             onLoadFailed = { mapError = it },
             modifier = Modifier.fillMaxSize(),
         )
-        if (simulating && !setupOpen) {
-            SimulatedBadge(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(top = 8.dp, start = 16.dp, end = 16.dp),
-            )
-        }
         // Not composed under the setup screen, so screen readers don't find it there.
         if (!setupOpen) Box(
             modifier = Modifier
@@ -257,6 +254,28 @@ fun FlyoffScreen() {
                     }
                     // Anchored at the bottom: if the panel must scroll, the flight card stays in view.
                     .verticalScroll(rememberScrollState(), reverseScrolling = true),
+            )
+        }
+        // After the panel, so the panel can never draw over it; placed in the free map area.
+        if (simulating && !setupOpen) {
+            val freeSide = panel?.let { freeSide(widthPx, heightPx, it) } ?: FreeSide.ABOVE
+            val toDp = { px: Int -> with(density) { px.toDp() } }
+            SimulatedBadge(
+                Modifier
+                    .align(
+                        when (freeSide) {
+                            FreeSide.ABOVE -> Alignment.TopCenter
+                            // Absolute, like FreeSide: right of the panel even in right-to-left layouts.
+                            FreeSide.RIGHT -> AbsoluteAlignment.TopRight
+                            FreeSide.LEFT -> AbsoluteAlignment.TopLeft
+                        },
+                    )
+                    .absolutePadding(
+                        left = if (freeSide == FreeSide.RIGHT) toDp(panel?.right ?: 0) else 0.dp,
+                        right = if (freeSide == FreeSide.LEFT) toDp(widthPx - (panel?.left ?: widthPx)) else 0.dp,
+                    )
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 8.dp, start = 16.dp, end = 16.dp),
             )
         }
         if (setupOpen) {
