@@ -1,0 +1,262 @@
+{
+  "version": 8,
+  "name": "Flyoff Light",
+  "metadata": {
+    "flyoff:about": "Flyoff's own style for the bundled OpenMapTiles-schema world map, zoom 0-5. Works with no network."
+  },
+  "center": [0, 20],
+  "zoom": 1,
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "url": "pmtiles://asset://basemap/world.pmtiles",
+      "attribution": "<a href=\"https://openfreemap.org\">OpenFreeMap</a> <a href=\"https://www.openmaptiles.org/\">© OpenMapTiles</a> <a href=\"https://www.openstreetmap.org/copyright\">© OpenStreetMap contributors</a>"
+    }
+  },
+  "glyphs": "asset://fonts/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "land",
+      "type": "background",
+      "paint": {"background-color": "#f3f0e8"}
+    },
+    {
+      "id": "ice",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "filter": ["==", ["get", "class"], "ice"],
+      "paint": {"fill-color": "#fbfdff", "fill-opacity": 0.9}
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "water",
+      "filter": ["!=", ["get", "brunnel"], "tunnel"],
+      "paint": {"fill-color": "#a9cbe3", "fill-antialias": true}
+    },
+    {
+      "id": "river",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "waterway",
+      "minzoom": 4,
+      "filter": ["==", ["get", "class"], "river"],
+      "paint": {
+        "line-color": "#a9cbe3",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.6, 5, 1]
+      }
+    },
+    {
+      "id": "boundary-state",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "boundary",
+      "minzoom": 3,
+      "filter": ["all",
+        ["==", ["get", "admin_level"], 4],
+        ["!=", ["get", "maritime"], 1]
+      ],
+      "layout": {"line-join": "round"},
+      "paint": {
+        "line-color": "#b9aec4",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.4, 5, 0.8],
+        "line-dasharray": [3, 2]
+      }
+    },
+    {
+      "id": "boundary-country-disputed",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "boundary",
+      "filter": ["all",
+        ["==", ["get", "admin_level"], 2],
+        ["!=", ["get", "maritime"], 1],
+        ["==", ["get", "disputed"], 1]
+      ],
+      "layout": {"line-join": "round"},
+      "paint": {
+        "line-color": "#8c7a99",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 1.4],
+        "line-dasharray": [2, 2]
+      }
+    },
+    {
+      "id": "boundary-country",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "boundary",
+      "filter": ["all",
+        ["==", ["get", "admin_level"], 2],
+        ["!=", ["get", "maritime"], 1],
+        ["!=", ["get", "disputed"], 1]
+      ],
+      "layout": {"line-join": "round", "line-cap": "round"},
+      "paint": {
+        "line-color": "#8c7a99",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 1.4]
+      }
+    },
+    {
+      "id": "label-water",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "water_name",
+      "filter": ["in", ["get", "class"], ["literal", ["ocean", "sea"]]],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Italic"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 0, 10, 5, 13],
+        "text-letter-spacing": 0.1,
+        "text-max-width": 8,
+        "symbol-placement": "point"
+      },
+      "paint": {
+        "text-color": "#4b7da3",
+        "text-halo-color": "rgba(169, 203, 227, 0.6)",
+        "text-halo-width": 1
+      }
+    },
+    {
+      "id": "city-dot-minor",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 5,
+      "metadata": {"flyoff:about": "Smaller cities once zoomed in past the major ones: rank 5 from zoom 5, rank 6 from zoom 6 (the z5 tiles hold ranks up to 6)."},
+      "filter": ["all",
+        ["==", ["get", "class"], "city"],
+        ["!=", ["get", "capital"], 2],
+        [">=", ["coalesce", ["get", "rank"], 99], 5],
+        ["<=", ["coalesce", ["get", "rank"], 99], ["step", ["zoom"], 5, 6, 6]]
+      ],
+      "paint": {
+        "circle-radius": 1.8,
+        "circle-color": "#666666",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1
+      }
+    },
+    {
+      "id": "city-dot",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 3,
+      "filter": ["all",
+        ["==", ["get", "class"], "city"],
+        ["any",
+          ["==", ["get", "capital"], 2],
+          ["<=", ["coalesce", ["get", "rank"], 99], 4]
+        ]
+      ],
+      "paint": {
+        "circle-radius": ["case", ["==", ["get", "capital"], 2], 3, 2.2],
+        "circle-color": "#555555",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1
+      }
+    },
+    {
+      "id": "label-city-minor",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 5,
+      "filter": ["all",
+        ["==", ["get", "class"], "city"],
+        ["!=", ["get", "capital"], 2],
+        [">=", ["coalesce", ["get", "rank"], 99], 5],
+        ["<=", ["coalesce", ["get", "rank"], 99], ["step", ["zoom"], 5, 6, 6]]
+      ],
+      "layout": {
+        "symbol-sort-key": ["coalesce", ["get", "rank"], 99],
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 5, 11, 8, 12],
+        "text-max-width": 8,
+        "text-variable-anchor": ["left", "right", "top", "bottom"],
+        "text-radial-offset": 0.4
+      },
+      "paint": {
+        "text-color": "#555555",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "label-city",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 3,
+      "filter": ["all",
+        ["==", ["get", "class"], "city"],
+        ["any",
+          ["==", ["get", "capital"], 2],
+          ["<=", ["coalesce", ["get", "rank"], 99], 4]
+        ]
+      ],
+      "layout": {
+        "symbol-sort-key": ["case", ["==", ["get", "capital"], 2], 0, ["coalesce", ["get", "rank"], 99]],
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 3, 11, 5, 13],
+        "text-max-width": 8,
+        "text-variable-anchor": ["left", "right", "top", "bottom"],
+        "text-radial-offset": 0.5
+      },
+      "paint": {
+        "text-color": "#333333",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "label-country",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 1,
+      "filter": ["==", ["get", "class"], "country"],
+      "layout": {
+        "symbol-sort-key": ["coalesce", ["get", "rank"], 99],
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Medium"],
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.08,
+        "text-size": ["interpolate", ["linear"], ["zoom"],
+          1, ["step", ["coalesce", ["get", "rank"], 9], 10, 2, 9, 3, 8],
+          5, ["step", ["coalesce", ["get", "rank"], 9], 15, 2, 13, 3, 10]
+        ],
+        "text-max-width": 7
+      },
+      "paint": {
+        "text-color": "#4a4152",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.4
+      }
+    },
+    {
+      "id": "label-continent",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "maxzoom": 1,
+      "filter": ["==", ["get", "class"], "continent"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Medium"],
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.15,
+        "text-size": 12
+      },
+      "paint": {
+        "text-color": "#6f6478",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    }
+  ]
+}

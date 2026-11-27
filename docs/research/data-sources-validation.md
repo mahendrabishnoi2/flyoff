@@ -144,6 +144,12 @@ Each tile's bytes are counted once, even when several tiles share the same data 
 - "Continental US, zoom 0–10, is 361 MB" ✓. This comes from VIPTrack's release notes; we measured **386 MB** for the box -125, 24, -66.9, 49.5.
 - "A city at 68 MB full detail vs 813 KB to zoom 6" ✗ **Unsourced.** The number isn't in any cited source. Drop it.
 
+**OpenFreeMap (OpenMapTiles schema), measured 2026-11-26** (build `20261101_080013_pt`, `tools/basemap/tile_stats.py`):
+
+- The raw zoom 0–5 world extract is **56.1 MB** (zoom 0–4: 29.0 MB), nearly 4× the Protomaps figure. The `place` layer carries every `name:xx` translation, including about 11k state labels from zoom 2.
+- Keeping only the layers our style draws and the names `name`, `name:en`, `name_en`, `name:latin` and `name_int` brings it to **7.3 MB** (`tools/basemap/build_basemap.sh`). The rendered map is pixel-identical.
+- The three bundled Noto Sans weights, ranges below U+0600, total 1.7 MB.
+
 **Per-flight corridor**, 350 km wide along the great circle, zooms 6 to N:
 
 | Route | Length | Up to zoom 8 | Up to zoom 9 | Up to zoom 10 |
@@ -165,7 +171,7 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 ## 6. Map engine: MapLibre Native Android
 
 - **Licence:** BSD 2-Clause.
-- **PMTiles:** supported since **11.8.0** according to the changelog (the docs say 11.7.0). Accepted URLs: `pmtiles://https://…`, `pmtiles://file://…` and `pmtiles://asset://…`. Since 13.7.1, files in the app package are read by byte range.
+- **PMTiles:** supported since **11.8.0** according to the changelog (the docs say 11.7.0). Accepted URLs: `pmtiles://https://…` and `pmtiles://file://…`. **`pmtiles://asset://…` (a file inside the app package) needs 13.7.1 or later**, per the MapLibre skill `maplibre-native-gl-js-parity`.
 - **Offline limitation:** *"PMTiles sources do not support offline pack downloads or caching."* So the corridor download uses the normal offline downloader (`OfflineManager`) on standard XYZ/TileJSON tiles, and the bundled world map is a PMTiles asset.
 - **Size** (measured from the 13.7.1 package): `libmaplibre.so` is 13.0 MB on arm64 (9.6 MB on armv7), about 4–4.6 MB compressed. Expect **about 5 MB of download and about 13 MB on the device** per CPU type when shipped as an app bundle.
 
@@ -224,8 +230,8 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 
 | Part | Choice | Licence and credit |
 |---|---|---|
-| Map engine | MapLibre Native Android ≥ 11.8 | BSD-2 |
-| Bundled world map | OpenFreeMap PMTiles extract, zoom 0–5 (about 15 MB) | ODbL Produced Work: *"© OpenMapTiles © OpenStreetMap contributors"* |
+| Map engine | MapLibre Native Android ≥ 13.7.1 | BSD-2 |
+| Bundled world map | OpenFreeMap PMTiles extract, zoom 0–5 (about 15 MB) | ODbL Produced Work: *"OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"* |
 | Corridor download | OpenFreeMap public tiles through the offline downloader, zoom 8 by default, within the terms limits | Same as above |
 | Routes | VRS standing data in a compact custom format, updated weekly from our own GitHub Release | CC0 (credit is optional but nice) |
 | Airports | OurAirports, scheduled-only, 7 columns | Unlicense / public domain |
