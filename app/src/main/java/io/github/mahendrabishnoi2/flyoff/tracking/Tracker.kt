@@ -1,5 +1,6 @@
 package io.github.mahendrabishnoi2.flyoff.tracking
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.location.Location
@@ -43,6 +44,11 @@ data class TrackingState(
     val track: List<TrackPoint> = emptyList(),
     /** Why tracking last stopped on its own; cleared when the user dismisses it or starts again. */
     val error: TrackingError? = null,
+    /**
+     * The flight whose tracking ended without the user stopping it: Android killed the app (or
+     * destroyed the service) while it was recording. The UI offers to resume it.
+     */
+    val interrupted: FlightCodes? = null,
 ) {
     val active: Boolean get() = flight != null
 }
@@ -50,9 +56,13 @@ data class TrackingState(
 /**
  * Tracking state for the whole process: the [FlightTrackingService] writes it, the UI reads it.
  * After process death everything here starts from scratch (tracking off): the service is
- * `START_NOT_STICKY`, so it never comes back on its own, and the UI shows that tracking ended.
- * The track itself survives in [trackFile].
+ * `START_NOT_STICKY`, so it never comes back on its own. The track itself survives in
+ * [trackFile], and a "tracking wanted" mark in preferences, set while tracking runs and cleared
+ * by every stop the app asks for, lets the next launch see that tracking ended without the user
+ * ([restore], [TrackingState.interrupted]).
  */
+// The KTX `edit {}` would need androidx.core:core-ktx as a direct dependency for a few calls.
+@SuppressLint("UseKtx")
 object Tracker {
     private val mutableState = MutableStateFlow(TrackingState())
     val state: StateFlow<TrackingState> = mutableState.asStateFlow()
@@ -81,7 +91,7 @@ object Tracker {
      * latest fix [lastFix] is shown until the service's first one arrives.
      */
     fun start(context: Context, flight: TrackedFlight, lastFix: Location?) {
-        mutableState.update { it.copy(error = null, lastFix = lastFix) }
+        mutableState.update { it.copy(error = null, interrupted = null, lastFix = lastFix) }
         try {
             // A plain start, not startForegroundService(): the app is in the foreground, and if
             // startForeground() then fails the service can stop without the system crashing the
@@ -89,19 +99,42 @@ object Tracker {
             context.startService(FlightTrackingService.startIntent(context, flight))
         } catch (_: IllegalStateException) {
             // Not in the foreground after all (background start restrictions).
+            clearWanted(context)
             onStopped(TrackingError.NOT_ALLOWED)
         } catch (_: SecurityException) {
+            clearWanted(context)
             onStopped(TrackingError.PERMISSION)
         }
     }
 
+    /** Stops tracking (the user asked, or the flight changed), and forgets an [TrackingState.interrupted] one. */
     fun stop(context: Context) {
+        // Before the service's onDestroy, which takes a remaining mark as an interruption.
+        clearWanted(context)
         context.stopService(Intent(context, FlightTrackingService::class.java))
         onStopped(null)
+        mutableState.update { it.copy(interrupted = null) }
     }
 
     fun clearError() {
         mutableState.update { it.copy(error = null) }
+    }
+
+    /**
+     * On launch: if tracking was still wanted when the process died, marks that flight
+     * [TrackingState.interrupted]. Resuming is up to the user, from the visible app, which is
+     * what lets a location foreground service start.
+     */
+    fun restore(context: Context) {
+        if (state.value.active) return
+        val codes = wanted(context) ?: return
+        mutableState.update { if (it.active) it else it.copy(interrupted = codes) }
+    }
+
+    /** The user doesn't want to resume the interrupted tracking. */
+    fun dismissInterrupted(context: Context) {
+        clearWanted(context)
+        mutableState.update { it.copy(interrupted = null) }
     }
 
     /** Reads the recorded track of [codes] from the file, unless it is loaded or being recorded. */
@@ -120,6 +153,15 @@ object Tracker {
     /** The one track file: it belongs to one flight at a time (its header says which). */
     fun trackFile(context: Context): File = File(context.filesDir, "track.log")
 
+    private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun wanted(context: Context): FlightCodes? =
+        prefs(context).let { FlightCodes.parse(it.getString(WANTED_ORIGIN, null), it.getString(WANTED_DESTINATION, null)) }
+
+    private const val PREFS = "tracking"
+    private const val WANTED_ORIGIN = "wanted_origin"
+    private const val WANTED_DESTINATION = "wanted_destination"
+
     // Called by FlightTrackingService on the main thread.
 
     /** Writes [point] to [file] soon, after anything already queued; it isn't cancelled by a stop. */
@@ -133,8 +175,12 @@ object Tracker {
         }
     }
 
-    internal fun onStarted(flight: TrackedFlight, track: List<TrackPoint>) {
-        mutableState.update { it.copy(flight = flight, trackCodes = flight.codes, track = track, error = null) }
+    internal fun onStarted(context: Context, flight: TrackedFlight, track: List<TrackPoint>) {
+        prefs(context).edit()
+            .putString(WANTED_ORIGIN, flight.codes.origin)
+            .putString(WANTED_DESTINATION, flight.codes.destination)
+            .apply()
+        mutableState.update { it.copy(flight = flight, trackCodes = flight.codes, track = track, error = null, interrupted = null) }
     }
 
     internal fun onFix(location: Location) {
@@ -149,7 +195,24 @@ object Tracker {
         mutableState.update { it.copy(providerEnabled = enabled) }
     }
 
-    internal fun onStopped(error: TrackingError?) {
+    /** The service ended tracking itself (an error, or the notification's Stop). */
+    internal fun onStoppedByService(context: Context, error: TrackingError?) {
+        clearWanted(context)
+        onStopped(error)
+    }
+
+    /** The service is being destroyed; if tracking was still wanted, it was interrupted. */
+    internal fun onDestroyed(context: Context) {
+        val wanted = wanted(context)
+        onStopped(null)
+        if (wanted != null) mutableState.update { it.copy(interrupted = wanted) }
+    }
+
+    internal fun clearWanted(context: Context) {
+        prefs(context).edit().clear().apply()
+    }
+
+    private fun onStopped(error: TrackingError?) {
         mutableState.update {
             it.copy(flight = null, lastFix = null, providerEnabled = true, error = error ?: it.error)
         }

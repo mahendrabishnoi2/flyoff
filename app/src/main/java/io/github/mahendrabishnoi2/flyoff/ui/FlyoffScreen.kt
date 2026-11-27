@@ -144,6 +144,8 @@ fun FlyoffScreen() {
     // the screen listens itself, only while visible. The service asks for fixes more often while
     // the screen is visible.
     val tracking by Tracker.state.collectAsStateWithLifecycle()
+    // Did Android end tracking (kill the app) while it was recording? Then offer to resume.
+    LaunchedEffect(Unit) { Tracker.restore(context) }
     LifecycleStartEffect(Unit) {
         Tracker.setUiVisible(true)
         onStopOrDispose { Tracker.setUiVisible(false) }
@@ -226,8 +228,9 @@ fun FlyoffScreen() {
         if (codes != flightCodes) {
             simulation = null
             cameraMovedByUser = false
-            // The track belongs to one flight: a new or cleared flight stops it and starts afresh.
-            if (trackingActive) Tracker.stop(context)
+            // The track belongs to one flight: a new or cleared flight stops it (or forgets an
+            // interrupted one) and starts afresh.
+            Tracker.stop(context)
             scope.launch { Tracker.forgetTrack(context) }
         }
         if (codes == null) store.clear() else store.save(codes)
@@ -306,6 +309,8 @@ fun FlyoffScreen() {
                     notificationsOff = !notificationsEnabled,
                 ),
                 trackingError = tracking.error,
+                trackingInterrupted = !trackingActive && plan != null && tracking.interrupted == plan.codes,
+                onDismissInterrupted = { Tracker.dismissInterrupted(context) },
                 batterySaverLimitsGps = batterySaverLimitsGps && !simulating,
                 onStartTracking = {
                     val needsAsking = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -433,6 +438,8 @@ private fun StatusPanel(
     statusLine: StatusLine?,
     tracking: TrackingControls,
     trackingError: TrackingError?,
+    trackingInterrupted: Boolean,
+    onDismissInterrupted: () -> Unit,
     batterySaverLimitsGps: Boolean,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
@@ -500,6 +507,16 @@ private fun StatusPanel(
                     ),
                     action = stringResource(R.string.ok),
                     onAction = onDismissTrackingError,
+                )
+            }
+            if (trackingInterrupted) {
+                MessageCard(
+                    title = stringResource(R.string.tracking_stopped_title),
+                    body = stringResource(R.string.tracking_interrupted_body),
+                    action = stringResource(R.string.resume_tracking).takeIf { tracking.canStart },
+                    onAction = onStartTracking,
+                    secondaryAction = stringResource(R.string.dismiss),
+                    onSecondaryAction = onDismissInterrupted,
                 )
             }
             if (batterySaverLimitsGps) {
@@ -629,7 +646,7 @@ private fun MessageCard(
                 modifier = Modifier.semantics { heading() },
             )
             Text(text = body, style = MaterialTheme.typography.bodyMedium)
-            if (action != null) {
+            if (action != null || secondaryAction != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -637,7 +654,7 @@ private fun MessageCard(
                     if (secondaryAction != null) {
                         TextButton(onClick = onSecondaryAction) { Text(secondaryAction) }
                     }
-                    Button(onClick = onAction) { Text(action) }
+                    if (action != null) Button(onClick = onAction) { Text(action) }
                 }
             }
         }

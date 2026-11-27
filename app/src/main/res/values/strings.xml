@@ -95,6 +95,9 @@
     <string name="tracking_stopped_not_allowed">Android didn\'t let tracking start. With Flyoff open, tap Start tracking again.</string>
     <string name="tracking_stopped_no_gps">This device\'s GPS isn\'t available, so tracking stopped.</string>
     <string name="ok">OK</string>
+    <string name="tracking_interrupted_body">Android closed Flyoff while it was recording this flight. Resume to keep recording; the track so far is kept.</string>
+    <string name="resume_tracking">Resume</string>
+    <string name="dismiss">Dismiss</string>
 
     <!-- Battery Saver -->
     <string name="battery_saver_title">Battery Saver is on</string>

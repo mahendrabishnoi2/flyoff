@@ -56,7 +56,8 @@ import java.io.IOException
  * doesn't end the track.
  *
  * `START_NOT_STICKY`: if Android kills the process, a restart from the background couldn't
- * legally get location anyway. The UI then sees tracking off, and Start continues the same file
+ * legally get location anyway. The next launch shows that tracking stopped (see
+ * [Tracker.restore]), and Resume, or Start, continues the same file
  * (unless its newest point is over 12 hours old: see [TrackFile]).
  */
 class FlightTrackingService : Service() {
@@ -128,7 +129,7 @@ class FlightTrackingService : Service() {
         scope.cancel()
         // The 15 s refresh may have re-posted the notification; it must not outlive the service.
         notifications.cancel(NOTIFICATION_ID)
-        Tracker.onStopped(null)
+        Tracker.onDestroyed(this)
         super.onDestroy()
     }
 
@@ -169,7 +170,7 @@ class FlightTrackingService : Service() {
                     }
                 }
                 points.lastOrNull()?.let(decimator::accept)
-                Tracker.onStarted(requested, points)
+                Tracker.onStarted(this@FlightTrackingService, requested, points)
                 Tracker.uiVisible.collect { visible -> requestGps(if (visible) VISIBLE_INTERVAL_MS else HIDDEN_INTERVAL_MS) }
             },
             scope.launch {
@@ -201,7 +202,7 @@ class FlightTrackingService : Service() {
         locationManager.removeUpdates(listener)
         jobs.forEach { it.cancel() }
         flight = null
-        Tracker.onStopped(error)
+        Tracker.onStoppedByService(this, error)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
