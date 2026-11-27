@@ -41,10 +41,11 @@ jobs:
       - name: Build, lint and unit tests
         run: ./gradlew assembleDebug lintDebug testDebugUnitTest assembleRelease -Pflyoff.testSigning
 
-      - name: Map and airport build tests
+      - name: Map, airport and CI script tests
         run: |
           python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
           python3 -I -m unittest discover -s tools/airports -p 'test_*.py'
+          python3 -I -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Check APK size budget
         run: python3 -I .github/scripts/apk_report.py app/build/outputs/apk/release 30000000 >> "$GITHUB_STEP_SUMMARY"
