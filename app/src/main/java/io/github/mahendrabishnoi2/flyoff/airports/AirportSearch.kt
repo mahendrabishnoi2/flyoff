@@ -48,8 +48,25 @@ class AirportSearch(airports: List<Airport>) {
         for (airport in airports) putIfAbsent(airport.iata.uppercase(Locale.ROOT), airport)
     }
 
+    private val byIcaoCode = HashMap<String, Airport>(airports.size * 2).apply {
+        for (airport in airports) airport.icao?.let { putIfAbsent(it.uppercase(Locale.ROOT), airport) }
+    }
+
     /** The airport with this IATA code, ignoring case and surrounding spaces. */
     fun byIata(code: String): Airport? = byCode[code.trim().uppercase(Locale.ROOT)]
+
+    /** The airport with this ICAO code, ignoring case and surrounding spaces. */
+    fun byIcao(code: String): Airport? = byIcaoCode[code.trim().uppercase(Locale.ROOT)]
+
+    /**
+     * The airport a route's code names: four characters are an ICAO code (EGLL), three an IATA
+     * code (LHR). Null for anything else, or a code no bundled airport has.
+     */
+    fun byRouteCode(code: String): Airport? = when (code.trim().length) {
+        4 -> byIcao(code)
+        3 -> byIata(code)
+        else -> null
+    }
 
     /** Up to [limit] airports matching [query], best first. A blank query finds nothing. */
     fun search(query: String, limit: Int = 20): List<Airport> {

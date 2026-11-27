@@ -79,6 +79,22 @@ class AirportSearchTest {
     }
 
     @Test
+    fun `byIcao ignores case`() {
+        assertSame(airports[0], search.byIcao("egll"))
+        assertSame(airports[2], search.byIcao(" EGKK "))
+        assertNull(search.byIcao("ZZZZ"))
+    }
+
+    @Test
+    fun `byRouteCode reads four characters as ICAO and three as IATA`() {
+        assertSame(airports[0], search.byRouteCode("EGLL"))
+        assertSame(airports[0], search.byRouteCode("LHR"))
+        assertNull(search.byRouteCode("EG"))
+        assertNull(search.byRouteCode("EGLLX"))
+        assertNull(search.byRouteCode("ZZZZ"))
+    }
+
+    @Test
     fun `exact IATA code comes first, in any case`() {
         assertEquals("LHR", codes("lhr").first())
         assertEquals("LHR", codes("LHR").first())
