@@ -47,7 +47,7 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 | UI | Jetpack Compose, Material 3; single activity |
 | Build | Gradle with Kotlin DSL and a version catalog (`gradle/libs.versions.toml`) |
 | Map engine | MapLibre Native Android, the **`android-sdk-opengl`** artifact, ≥ 13.7.1 (needed to load `pmtiles://asset://`). The plain `android-sdk` artifact uses Vulkan and declares Vulkan as *required*, which would hide the app on phones without it. MapLibre's `2026.x-globe` releases come from a feature branch, so stay on the stable 13.x line. |
-| Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map `app/src/main/assets/basemap/world.pmtiles` (zoom 0–5, 7.3 MB, stored uncompressed in the APK); style `assets/style/flyoff.json`; fonts `assets/fonts/`. Route downloads go through MapLibre's offline downloader (Milestone 4). |
+| Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map `app/src/main/assets/basemap/world.pmtiles` (zoom 0–5, 7.3 MB, stored uncompressed in the APK); style `assets/style/flyoff.json`; fonts `assets/fonts/`. Route downloads go through MapLibre's offline downloader (Milestone 4) and are drawn with `assets/style/corridor.json`, merged into `flyoff.json` at runtime (`map/CorridorStyle.kt`). |
 | Location | Android location APIs; a foreground service for in-flight tracking (from Milestone 3) |
 | Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time. Bundled airports `app/src/main/assets/airports/airports.tsv` (4,077 airports with IANA time zones from timezone-boundary-builder, ODbL; see `NOTICE.txt` next to it). |
 | Android | Package `io.github.mahendrabishnoi2.flyoff`, minSdk 26, targetSdk 37, compileSdk 37.2 (Compose 1.13 needs 37.1+). AGP 9 with its built-in Kotlin support. All versions live in `gradle/libs.versions.toml`. |
@@ -65,12 +65,13 @@ python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
 python3 -I tools/airports/build_airports.py              # rebuild the bundled airports.tsv (downloads ~73 MB to ~/.cache/flyoff/airports)
 python3 -I -m unittest discover -s tools/airports -p 'test_*.py'
 NODE_PATH=$(npm root -g) node tools/basemap/preview/render.js [outdir]   # headless map screenshots (Playwright + Chromium)
+NODE_PATH=$(npm root -g) node tools/basemap/preview/render.js --corridor [outdir]   # corridor.json over a London–New York strip, with and without (live OpenFreeMap tiles, cached in ~/.cache/flyoff)
 python3 -I tools/basemap/tile_stats.py app/src/main/assets/basemap/world.pmtiles   # map size per zoom/layer
 ```
 
 The research measurement scripts are in `docs/research/scripts/`. Run them with `python3 -I`.
 
-**Changing the map:** the build keeps only the tile layers and name fields that `flyoff.json` uses, and fails if the style needs something it dropped. After a style change that uses a new layer, re-run `build_basemap.sh`. The pinned OpenFreeMap build is kept upstream for only about 6 months, so bump `OFM_BUILD` (and `OFM_BYTES`) when it disappears.
+**Changing the map:** the build keeps only the tile layers and name fields that `flyoff.json` uses, and fails if the style needs something it dropped. `corridor.json` (downloaded route detail) is not part of that check: it reads the full OpenFreeMap tiles. After a style change that uses a new layer, re-run `build_basemap.sh`. The pinned OpenFreeMap build is kept upstream for only about 6 months, so bump `OFM_BUILD` (and `OFM_BYTES`) when it disappears.
 
 ### Setting up a cloud session (no Android SDK installed)
 
