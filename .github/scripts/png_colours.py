@@ -3,7 +3,8 @@
 Usage: python3 -I png_colours.py <file.png> [min-colours]
 Prints the count. With min-colours, exits 1 if the image has fewer, which
 catches a blank or single-colour map. Supports 8-bit RGB/RGBA, non-interlaced
-PNGs, which is what `adb exec-out screencap -p` produces.
+PNGs, which is what `adb exec-out screencap -p` produces. route_span.py
+reuses pixels().
 """
 import struct
 import sys
@@ -11,6 +12,7 @@ import zlib
 
 
 def pixels(path):
+    """Yield each row of the PNG at [path] as (bytearray of samples, channels per pixel)."""
     data = open(path, "rb").read()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         sys.exit(f"{path}: not a PNG")
@@ -51,10 +53,15 @@ def pixels(path):
         prev = line
 
 
-colours = set()
-for row, ch in pixels(sys.argv[1]):
-    for x in range(0, len(row), ch * 4):  # sample every 4th pixel
-        colours.add(bytes(row[x:x + 3]))
-print(len(colours))
-if len(sys.argv) > 2 and len(colours) < int(sys.argv[2]):
-    sys.exit(f"{sys.argv[1]}: only {len(colours)} colours, expected at least {sys.argv[2]}")
+def main(argv):
+    colours = set()
+    for row, ch in pixels(argv[1]):
+        for x in range(0, len(row), ch * 4):  # sample every 4th pixel
+            colours.add(bytes(row[x:x + 3]))
+    print(len(colours))
+    if len(argv) > 2 and len(colours) < int(argv[2]):
+        sys.exit(f"{argv[1]}: only {len(colours)} colours, expected at least {argv[2]}")
+
+
+if __name__ == "__main__":
+    main(sys.argv)
