@@ -12,6 +12,8 @@ data class Airport(
     val size: AirportSize,
     /** IANA time zone id, e.g. "Europe/London". */
     val timeZone: String,
+    /** Other names people search by, e.g. "Tokyo" for Narita or "NYC" for Newark. Search only; not for display. */
+    val keywords: List<String> = emptyList(),
 )
 
 /** OurAirports' airport type, used to rank search results: bigger airports first. */

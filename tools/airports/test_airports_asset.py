@@ -50,6 +50,12 @@ class CommittedAsset(unittest.TestCase):
         self.assertAlmostEqual(float(lhr["lat"]), 51.47, places=1)
         self.assertAlmostEqual(float(lhr["lon"]), -0.46, places=1)
 
+    def test_keywords(self):
+        self.assertIn("New York City", self.by_iata["EWR"]["keywords"].split(","))
+        self.assertIn("Tokyo", self.by_iata["NRT"]["keywords"].split(","))
+        self.assertIn("LON", self.by_iata["LHR"]["keywords"].split(","))
+        self.assertIn("Bombay", self.by_iata["BOM"]["keywords"].split(","))
+
     def test_heathrow_is_listed_before_gatwick(self):
         order = [r["iata"] for r in self.rows]
         self.assertLess(order.index("LHR"), order.index("LGW"))

@@ -17,14 +17,14 @@ CSV_HEADER = ('"id","ident","type","name","latitude_deg","longitude_deg","elevat
               '"gps_code","local_code","home_link","wikipedia_link","keywords"\n')
 
 
-def csv_row(ident, kind, name, lat, lon, country, city, scheduled, icao, iata):
+def csv_row(ident, kind, name, lat, lon, country, city, scheduled, icao, iata, keywords=""):
     return (f'1,"{ident}","{kind}","{name}",{lat},{lon},0,"EU","{country}","{country}-X","{city}",'
-            f'"{scheduled}","{icao}","{iata}","{icao}","","","",""\n')
+            f'"{scheduled}","{icao}","{iata}","{icao}","","","","{keywords}"\n')
 
 
 def airport(iata, size="L", runway=0, ident=None, **extra):
     a = {"iata": iata, "icao": "", "name": f"{iata} Airport", "city": "Town", "country": "GB",
-         "lat": 1.0, "lon": 2.0, "size": size, "runway": runway, "ident": ident or "X" + iata, "tz": "Europe/London"}
+         "lat": 1.0, "lon": 2.0, "size": size, "runway": runway, "ident": ident or "X" + iata, "tz": "Europe/London", "keywords": []}
     a.update(extra)
     return a
 
@@ -36,7 +36,7 @@ HOLE = [[4, 4], [6, 4], [6, 6], [4, 6], [4, 4]]
 class Selection(unittest.TestCase):
     def rows(self):
         return b.read_csv(CSV_HEADER
-                          + csv_row("EGLL", "large_airport", "London Heathrow Airport", 51.47, -0.46, "GB", "London", "yes", "EGLL", "LHR")
+                          + csv_row("EGLL", "large_airport", "London Heathrow Airport", 51.47, -0.46, "GB", "London", "yes", "EGLL", "LHR", "LON, Londres, EGLL")
                           + csv_row("EGKB", "medium_airport", "Biggin Hill", 51.33, 0.03, "GB", "London", "no", "EGKB", "BQH")
                           + csv_row("XHEL", "heliport", "Some Heliport", 50, 0, "GB", "X", "yes", "", "HEL")
                           + csv_row("XCLO", "closed", "Old Field", 50, 0, "GB", "X", "yes", "", "OLD")
@@ -54,6 +54,7 @@ class Selection(unittest.TestCase):
                          ("EGLL", "London Heathrow Airport", "London", "GB", "L", 12802))
         self.assertAlmostEqual(lhr["lat"], 51.47)
         self.assertAlmostEqual(lhr["lon"], -0.46)
+        self.assertEqual(lhr["keywords"], ["LON", "Londres"])
 
     def test_seaplane_base_is_other(self):
         self.assertEqual(b.select_airports(self.rows(), {})[1]["size"], "O")
@@ -67,6 +68,41 @@ class Selection(unittest.TestCase):
         runways = b.read_csv('"airport_ident","length_ft","closed"\n'
                              '"EGLL",12802,0\n"EGLL",12001,0\n"EGLL",14000,1\n"XNOL",,0\n')
         self.assertEqual(b.longest_runways(runways), {"EGLL": 12802, "XNOL": 0})
+
+
+class Keywords(unittest.TestCase):
+    def clean(self, raw, name="Narita International Airport", city="Narita", codes=("NRT", "RJAA")):
+        return b.clean_keywords(raw, name, city, list(codes))
+
+    def test_keeps_aliases_in_order(self):
+        self.assertEqual(self.clean("TYO, Tokyo, New Tokyo International Airport"),
+                         ["TYO", "Tokyo", "New Tokyo International Airport"])
+
+    def test_drops_repeats_of_name_city_codes_and_earlier_keywords(self):
+        self.assertEqual(self.clean("Narita, NRT, rjaa, Narita Airport, NARITA INTERNATIONAL, Tokyo, Tokyo Narita Airport, tokyo"),
+                         ["Tokyo"])
+
+    def test_repeats_ignore_accents_and_punctuation(self):
+        self.assertEqual(self.clean("Zurich, Zürich-Kloten, Kloten", name="Zürich Airport", city="Zurich", codes=("ZRH",)),
+                         ["Zürich-Kloten"])
+
+    def test_drops_identifier_codes_but_keeps_city_codes(self):
+        self.assertEqual(self.clean("10AK, 7K5, K-33, ETSM, WI1A, LON, Terminal 2"), ["LON", "Terminal 2"])
+
+    def test_drops_non_latin_entries(self):
+        self.assertEqual(self.clean("成田国際空港, Москва, مطار دبي, Sân bay Quốc tế"), ["Sân bay Quốc tế"])
+
+    def test_cleans_whitespace_and_format_characters(self):
+        self.assertEqual(self.clean(" New\tTokyo \u200e,  ,"), ["New Tokyo"])
+
+    def test_caps_length_and_count(self):
+        long = "A" + "a" * b.MAX_KEYWORD_LENGTH
+        self.assertEqual(self.clean(f"{long}, Short"), ["Short"])
+        many = ", ".join(f"Alias{chr(65 + i)} Field" for i in range(b.MAX_KEYWORDS + 2))
+        self.assertEqual(len(self.clean(many)), b.MAX_KEYWORDS)
+
+    def test_empty(self):
+        self.assertEqual(self.clean(""), [])
 
 
 class Duplicates(unittest.TestCase):
@@ -152,17 +188,19 @@ class Zones(unittest.TestCase):
 class Tsv(unittest.TestCase):
     def test_round_trip(self):
         a = airport("LHR", icao="EGLL", name="London Heathrow Airport", city="London",
-                    lat=51.4706, lon=-0.461941, tz="Europe/London")
-        text = b.to_tsv([a])
-        self.assertEqual(text, "iata\ticao\tname\tcity\tcountry\tlat\tlon\tsize\ttz\n"
-                               "LHR\tEGLL\tLondon Heathrow Airport\tLondon\tGB\t51.4706\t-0.4619\tL\tEurope/London\n")
-        self.assertEqual(b.read_tsv(text)[0]["tz"], "Europe/London")
+                    lat=51.4706, lon=-0.461941, tz="Europe/London", keywords=["LON", "Londres"])
+        text = b.to_tsv([a, airport("ABC")])
+        self.assertEqual(text, "iata\ticao\tname\tcity\tcountry\tlat\tlon\tsize\ttz\tkeywords\n"
+                               "LHR\tEGLL\tLondon Heathrow Airport\tLondon\tGB\t51.4706\t-0.4619\tL\tEurope/London\tLON,Londres\n"
+                               "ABC\t\tABC Airport\tTown\tGB\t1.0000\t2.0000\tL\tEurope/London\t\n")
+        rows = b.read_tsv(text)
+        self.assertEqual((rows[0]["tz"], rows[0]["keywords"], rows[1]["keywords"]), ("Europe/London", "LON,Londres", ""))
 
     def test_read_tsv_rejects_bad_files(self):
         good = b.to_tsv([airport("LHR")])
         for bad, message in ((good.replace("iata", "code"), "header"),
                              (good.rstrip("\n"), "line break"),
-                             (good.replace("\tGB\t", "\tGB\textra\t"), "line 2: 10 fields")):
+                             (good.replace("\tGB\t", "\tGB\textra\t"), "line 2: 11 fields")):
             with self.assertRaisesRegex(b.BuildError, message):
                 b.read_tsv(bad)
 
@@ -170,11 +208,13 @@ class Tsv(unittest.TestCase):
         rows = b.read_tsv(b.to_tsv([
             airport("LHR"), airport("LHR"), airport("lh1"), airport("BAD", icao="EG"),
             airport("POS", lat=91.0), airport("NTZ", tz=""), airport("SIZ", size="X"), airport("CTY", country="gbr"),
+            airport("KWD", keywords=["ok", ""]), airport("KWN", keywords=["k"] * (b.MAX_KEYWORDS + 1)),
         ]))
         problems = "\n".join(b.check(rows))
         for expected in ("LHR (LHR Airport): duplicate", "bad IATA code 'lh1'", "bad ICAO code 'EG'",
                          "POS (POS Airport): position 91.0", "NTZ (NTZ Airport): bad time zone",
-                         "bad size 'X'", "bad country 'gbr'", "8 airports, expected"):
+                         "bad size 'X'", "bad country 'gbr'", "KWD (KWD Airport): bad keywords",
+                         "KWN (KWN Airport): bad keywords", "10 airports, expected"):
             self.assertIn(expected, problems)
 
     def test_check_passes_good_rows(self):

@@ -107,7 +107,8 @@ What this means:
 **What we bundle** (measured 2026-11-27, `tools/airports/build_airports.py`, OurAirports commit `a537e08` of 2026-11-26):
 
 - `scheduled_service=yes` (4,335 rows that day) **and** an IATA code (4,131) **and** not a heliport, balloon port or closed field: **4,077 airports** (1,150 large, 2,094 medium, 762 small, 71 seaplane bases). Heliports are left out because Flyoff tracks aeroplanes. No IATA code is shared by two of them; if one ever is, the larger airport is kept.
-- Nine columns, including an IANA time zone for the ETA in destination local time: **339 KB raw, 141 KB gzip** (`app/src/main/assets/airports/airports.tsv`). The APK stores assets compressed, so it adds about 141 KB.
+- Ten columns, including an IANA time zone for the ETA in destination local time and search keywords: **369 KB raw, 155 KB gzip** (`app/src/main/assets/airports/airports.tsv`). The APK stores assets compressed (less tightly than gzip -9): 170 KB in the debug APK.
+- Keywords come from OurAirports' `keywords` column, cleaned: Latin-script entries only, no identifier codes (`10AK`, old ICAO codes), nothing the name, city or codes already say, at most 5 entries of 40 characters. 1,194 airports keep some (26 KB of text; the column costs 30 KB raw, 14 KB gzip). They let "new york" find Newark ("New York City"), "tokyo" find Narita, and "nyc", "lon" or "bombay" work. Search ranks a keyword match below any city or name prefix match.
 - Rows are ordered biggest first (type, then the longest open runway from OurAirports `runways.csv`), so a search for "london" lists Heathrow before Gatwick.
 
 ### 4.1 Airport time zones: timezone-boundary-builder
@@ -252,7 +253,7 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 | Bundled world map | OpenFreeMap PMTiles extract, zoom 0–5 (about 15 MB) | ODbL Produced Work: *"OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"* |
 | Corridor download | OpenFreeMap public tiles through the offline downloader, zoom 8 by default, within the terms limits | Same as above |
 | Routes | VRS standing data in a compact custom format, updated weekly from our own GitHub Release | CC0 (credit is optional but nice) |
-| Airports | OurAirports, scheduled-only, with an IATA code, 9 columns | Unlicense / public domain |
+| Airports | OurAirports, scheduled-only, with an IATA code, 10 columns | Unlicense / public domain |
 | Airport time zones | timezone-boundary-builder 2026f, point-in-polygon at build time | ODbL: *"timezone-boundary-builder, © OpenStreetMap contributors"*; the airport file becomes an ODbL derivative database |
 | Terrain (later) | Copernicus GLO-30 from the Copernicus Data Space | Modified-data notice **plus** the no-liability sentence |
 | Fonts | Noto Sans, ranges below U+0600 | OFL |
@@ -262,7 +263,7 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 - MapLibre: about 5 MB
 - World map to zoom 5: 15 MB
 - Routes: 3 MB
-- Airports: 0.14 MB (with time zones)
+- Airports: 0.16 MB (with time zones and keywords)
 - Fonts: 1–2 MB
 - App code: a few MB
 
