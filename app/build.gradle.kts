@@ -52,6 +52,8 @@ android {
 
     buildFeatures {
         compose = true
+        // The User-Agent of route map downloads names the app version.
+        buildConfig = true
     }
 
     // MapLibre reads the bundled map with random byte-range access, which is
@@ -70,6 +72,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.maplibre.android)
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
