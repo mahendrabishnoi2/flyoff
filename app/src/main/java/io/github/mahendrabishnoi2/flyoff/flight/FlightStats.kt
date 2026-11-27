@@ -5,7 +5,8 @@ import io.github.mahendrabishnoi2.flyoff.geo.LatLon
 import kotlin.math.roundToLong
 
 /**
- * One position fix, from the GPS or from [SimulatedFlight].
+ * One position fix, from the GPS or from [SimulatedFlight], or an estimate from
+ * [DeadReckoning] while the GPS has dropped out.
  * Each optional value is null when the source didn't report it.
  */
 data class Position(
@@ -17,6 +18,8 @@ data class Position(
     val bearingDegrees: Double?,
     /** Epoch milliseconds. */
     val timeMillis: Long,
+    /** True when this position was estimated (dead reckoning) rather than reported by the GPS. */
+    val estimated: Boolean = false,
 )
 
 /**
