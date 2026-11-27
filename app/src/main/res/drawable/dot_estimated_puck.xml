@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The estimated position with a heading: a grey arrow on a white disc with a soft shadow ring,
+     the same size as MapLibre's live puck so the two only differ in colour. Drawn for Flyoff. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="75dp"
+    android:height="75dp"
+    android:viewportWidth="75"
+    android:viewportHeight="75">
+    <path
+        android:fillAlpha="0.16"
+        android:fillColor="#263D57"
+        android:pathData="M37.5,0a37.5,37.5 0,1 1,0 75a37.5,37.5 0,1 1,0 -75z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M37.5,9a28.5,28.5 0,1 1,0 57a28.5,28.5 0,1 1,0 -57z" />
+    <path
+        android:fillColor="#A1B0C0"
+        android:pathData="M37.5,26.5L48.5,48L37.5,42.5L26.5,48Z" />
+</vector>

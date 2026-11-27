@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The estimated position's heading mark: a small grey wedge above the dot. Drawn for Flyoff. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp"
+    android:height="44dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <path
+        android:fillColor="#A1B0C0"
+        android:pathData="M18,1L22.5,7.5L13.5,7.5Z" />
+</vector>

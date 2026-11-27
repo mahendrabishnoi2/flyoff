@@ -26,6 +26,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.github.mahendrabishnoi2.flyoff.R
 import io.github.mahendrabishnoi2.flyoff.geo.LatLon
 import io.github.mahendrabishnoi2.flyoff.location.showsBearing
 import io.github.mahendrabishnoi2.flyoff.location.toGpsFix
@@ -66,7 +67,7 @@ private const val WORLD_SIZE_DP = 512.0
  * @param showLocation whether the location dot may be shown: precise location is granted, or
  *   the flight simulator is running.
  * @param estimated whether [location] is a dead-reckoning estimate rather than a fix: the dot is
- *   then drawn grey, in MapLibre's own stale-state colours.
+ *   then drawn grey (#a1b0c0, MapLibre's own stale grey).
  * @param following whether the camera follows the dot. A map gesture turns it off
  *   and reports that through [onFollowingChange].
  * @param route the flight's route to draw, or null for none.
@@ -286,20 +287,21 @@ private fun syncLocation(
     }
 }
 
-/** #a1b0c0: a blue-grey that reads as "not live" next to MapLibre's blue dot (#4a90e2). CI looks for it. */
-private const val ESTIMATED_DOT_COLOR = 0xFFA1B0C0.toInt()
-
 /**
  * The dot's two looks. MapLibre's own stale state can't mark an estimate: every
- * `forceLocationUpdate` resets its stale timer, and the estimate is fed in every second. Its
- * default stale tints are also unset (null), so they wouldn't change the colour anyway. An
- * estimate gets the live options with the dot and its arrow tinted grey ([ESTIMATED_DOT_COLOR]),
- * the white ring kept for contrast, and no accuracy circle.
+ * `forceLocationUpdate` resets its stale timer, and the estimate is fed in every second.
+ *
+ * The estimate uses its own grey drawables (#a1b0c0, a blue-grey that reads as "not live" next
+ * to MapLibre's blue #4a90e2; CI looks for both) and no accuracy circle. It must not tint
+ * MapLibre's drawables instead: MapLibre tints the drawable it gets from the resource cache
+ * without `mutate()`, so the grey sticks to the cached copy and the live dot stays grey after
+ * the GPS is back, until that cache entry is garbage-collected.
  */
 private class DotStyles(val live: LocationComponentOptions) {
     val estimated: LocationComponentOptions = live.toBuilder()
-        .foregroundTintColor(ESTIMATED_DOT_COLOR)
-        .bearingTintColor(ESTIMATED_DOT_COLOR)
+        .foregroundDrawable(R.drawable.dot_estimated)
+        .gpsDrawable(R.drawable.dot_estimated_puck)
+        .bearingDrawable(R.drawable.dot_estimated_bearing)
         .accuracyAlpha(0f)
         .build()
     var estimatedShown = false
