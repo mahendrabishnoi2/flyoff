@@ -4,9 +4,10 @@
 # up a flight (LHR to JFK), check the route is all on screen, run the flight
 # simulator and check its stats and that real GPS is off meanwhile. Then the
 # Milestone 3 checks: "GPS ready", tracking in a foreground service with its
-# notification, recording with the screen off, the estimated position during a
-# GPS drop-out, tracking in the background, Stop, simulated GPS gaps and the
-# Battery Saver warning. Last, set up a flight across the antimeridian, and
+# notification, recording with the screen off, the estimated position (and its
+# grey dot) during a GPS drop-out and recording again after it, tracking in the
+# background, Resume after Android kills the app, Stop, simulated GPS gaps and
+# the Battery Saver warning. Last, set up a flight across the antimeridian, and
 # simulate without location permission.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
@@ -115,6 +116,22 @@ tracking_notifications() {
   adb shell dumpsys notification --noredact > "$OUT/$1.txt"
   python3 -I "$SCRIPTS/tracking_dumps.py" notification "$OUT/$1.txt" "$PKG" flight_tracking "Tracking LHR .{1,8} JFK" ||
     fail "not a notification dump ($1.txt)"
+}
+
+# Check the location dot's colour in screenshot $1: $2 is "live" (MapLibre's blue,
+# #4a90e2) or "estimated" (Flyoff's grey, #a1b0c0). The dot paints about 500 pixels
+# of its colour; the map has none of that blue and only 16-29 pixels of that grey
+# (CI run 45943161253's screenshots). See dot_colour.py.
+dot_colour() {
+  local blue grey
+  blue=$(python3 -I "$SCRIPTS/dot_colour.py" "$OUT/$1.png" 4a90e2)
+  grey=$(python3 -I "$SCRIPTS/dot_colour.py" "$OUT/$1.png" a1b0c0 3)
+  echo "dot pixels in $1: $blue blue, $grey grey"
+  if [ "$2" = live ]; then
+    [ "$blue" -ge 150 ] && [ "$grey" -lt 100 ] || fail "the dot isn't the live blue ($1.png: $blue blue, $grey grey pixels)"
+  else
+    [ "$grey" -ge 150 ] && [ "$blue" -lt 100 ] || fail "the dot isn't the estimate's grey ($1.png: $blue blue, $grey grey pixels)"
+  fi
 }
 
 # Run "$2 $1" (a state function above) until it prints $3, for up to $4 seconds.
@@ -379,6 +396,7 @@ no_crash "start tracking"
 wait_state dumpsys-14-services service_state foreground-location 10
 wait_state dumpsys-14-notification tracking_notifications 1 10
 shot 14-tracking
+dot_colour 14-tracking live
 
 echo "== Screen off while tracking"
 before=$(track_points 15-before-sleep)
@@ -409,11 +427,25 @@ shot 15-after-screen-off
 
 echo "== GPS drop-out while tracking"
 fly
+# The emulator's GNSS re-sends its last `geo fix` every second with a fresh time
+# (CI run 45943161253), so pausing `geo fix` is no drop-out. Instead a test
+# provider that never reports stands in for gps. The app's registration carries
+# over: registrations live in LocationProviderManager, and setMockProvider() ->
+# MockableLocationProvider.setProviderLocked() stops the real provider and hands
+# the current request to the new one (AOSP android15-release). The shell's
+# `cmd location` calls are checked as com.android.shell (AppOpsManager.resolvePackageName
+# maps the shell uid to it), so that package needs the mock-location app-op.
+adb shell appops set com.android.shell android:mock_location allow
+adb shell cmd location providers add-test-provider gps --supportsAltitude --supportsSpeed --supportsBearing
+adb shell cmd location providers set-test-provider-enabled gps true
+listeners=$(gps_listeners_unthrottled dumpsys-16-mocked)
+grep -q "^ *gps provider \[mock\]:" "$OUT/dumpsys-16-mocked.txt" || fail "gps isn't a test provider (dumpsys-16-mocked.txt)"
+[ "$listeners" -ge 1 ] || fail "the app's GPS listener didn't survive the test provider ($listeners, dumpsys-16-mocked.txt)"
 # No fixes from here on: after 10 s the dot becomes an estimate and keeps moving.
-sleep 12
-wait_for 16-estimate "^Estimated position · last GPS fix" 20
+wait_for 16-estimate "^Estimated position · last GPS fix" 25
 first=$(read_number 16-estimate "^Remaining: ([0-9.,]+) km$")
 shot 16-estimate
+dot_colour 16-estimate estimated
 sleep 10
 wait_for 16-estimate-later "^Estimated position · last GPS fix" 10
 later=$(read_number 16-estimate-later "^Remaining: ([0-9.,]+) km$")
@@ -421,6 +453,23 @@ echo "estimated distance remaining: $first km, then $later km"
 python3 -I -c "import sys; sys.exit(0 if float(sys.argv[2]) < float(sys.argv[1]) else 1)" "$first" "$later" ||
   fail "the estimate didn't move on without fixes ($first km, then $later km)"
 no_crash "drop-out"
+
+echo "== GPS back after the drop-out"
+points=$(read_number 16-estimate-later "^Recording track · ([0-9,]+) points?$")
+adb shell cmd location providers remove-test-provider gps
+adb shell appops set com.android.shell android:mock_location default
+fly
+wait_gone 16-gps-back "^Estimated position" 20
+listeners=$(gps_listeners_unthrottled dumpsys-16-gps-back)
+grep -q "^ *gps provider:" "$OUT/dumpsys-16-gps-back.txt" || fail "gps is still a test provider (dumpsys-16-gps-back.txt)"
+[ "$listeners" -ge 1 ] || fail "the app's GPS listener is gone after the drop-out ($listeners, dumpsys-16-gps-back.txt)"
+fly
+after=$(track_points 16-gps-back-points)
+echo "track points: $points during the drop-out, $after after GPS came back"
+[ "$after" -gt "$points" ] || fail "fixes after the drop-out weren't recorded ($points points, then $after)"
+shot 16-gps-back
+dot_colour 16-gps-back live
+no_crash "GPS back"
 
 echo "== Background while tracking"
 adb shell input keyevent KEYCODE_HOME
@@ -433,8 +482,29 @@ fly
 wait_for 17-back "^Recording track · " 15
 no_crash "background while tracking"
 
+echo "== Tracking after Android kills the app"
+before=$(read_number 17-back "^Recording track · ([0-9,]+) points?$")
+# force-stop kills the process without the service's onDestroy, as when Android
+# ends the app for memory: the "tracking wanted" mark stays behind.
+adb shell am force-stop "$PKG"
+wait_state dumpsys-17-killed-services service_state absent 10
+adb shell am start -W -n "$PKG/.MainActivity"
+wait_for 17-interrupted "^Android closed Flyoff while it was recording" 30
+reject 17-interrupted "^Recording track"
+tap 17-interrupted "^Resume$"
+wait_for 17-resumed "^Recording track · " 15
+reject 17-resumed "^Android closed Flyoff"
+wait_state dumpsys-17-resumed-services service_state foreground-location 10
+resumed=$(read_number 17-resumed "^Recording track · ([0-9,]+) points?$")
+echo "track points: $before before the kill, $resumed after Resume"
+# At most the point being written when the process died may be lost.
+[ "$resumed" -ge $((before - 1)) ] || fail "Resume didn't continue the track ($before points, then $resumed)"
+no_crash "resume after kill"
+
 echo "== Stop tracking"
-tap 17-back "^Stop tracking$"
+fly
+ui 18-before-stop
+tap 18-before-stop "^Stop tracking$"
 wait_for 18-stopped "^Start tracking$" 15
 wait_state dumpsys-18-services service_state absent 10
 wait_state dumpsys-18-notification tracking_notifications 0 10
@@ -452,15 +522,17 @@ tap 19-sim-300 "^GPS gaps$"
 ui 19-gaps-on
 [ "$(python3 -I "$SCRIPTS/ui_find.py" attr "$OUT/19-gaps-on.xml" "^GPS gaps$" checked)" = "true" ] || fail "'GPS gaps' didn't turn on (19-gaps-on)"
 # LHR to JFK lasts about 77 s at 300x; the first gap is from 30 % to 40 % of it,
-# about 23 s to 31 s after Start. Pause in its middle: the estimate stays on screen.
+# about 23.0 s to 30.7 s after Start. Pause in its middle (26.9 s; the taps take a
+# few tenths of a second), then look: the estimate stays on screen while paused.
 play=$(settled_xy 19-gaps-on "^Start$")
 tap_xy "$play"
-sleep 25
-shot 19-sim-gap
+sleep 26.5
 tap_xy "$play"
 wait_for 19-sim-gap-paused "^Resume$" 10
 expect 19-sim-gap-paused "^Estimated position · last GPS fix"
 expect 19-sim-gap-paused "^Simulated position"
+shot 19-sim-gap
+dot_colour 19-sim-gap estimated
 tap 19-sim-gap-paused "^Stop$"
 wait_for 19-sim-stopped "^Simulate flight$" 10
 no_crash "simulator gaps"
