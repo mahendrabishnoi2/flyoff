@@ -3,6 +3,8 @@
 #   app/src/main/assets/basemap/world.pmtiles   zoom 0..MAXZOOM extract of OpenFreeMap's planet,
 #                                                cut down to the layers and names our style uses
 #   app/src/main/assets/fonts/<font>/<range>.pbf MapLibre glyphs, Unicode ranges below U+0600
+#   app/src/main/assets/basemap/tile_sizes.bin  per zoom-5 tile, mean and max tile size at zooms 6-9
+#                                                (read from the planet's directories, no tiles)
 #
 # Usage:  tools/basemap/build_basemap.sh            (run from anywhere)
 #         MAXZOOM=4 tools/basemap/build_basemap.sh  (override the zoom, e.g. to measure)
@@ -122,7 +124,11 @@ mv "${TMP}" "${OUT}"
 rm -f "${EXTRACT}" "${SHRUNK}"
 "${PMTILES}" show "${OUT}"
 
-# ---- 3. Glyphs ----
+# ---- 3. Tile size table (for route download size estimates) ----
+
+python3 -I "${SCRIPT_DIR}/tile_size_table.py" "${OFM_URL}" "${OFM_BUILD}" "${ASSETS}/basemap/tile_sizes.bin"
+
+# ---- 4. Glyphs ----
 
 for font in "${FONTS[@]}"; do
   mkdir -p "${ASSETS}/fonts/${font}"
@@ -145,4 +151,4 @@ curl -fsSL -o "${ASSETS}/fonts/OFL.txt" "${FONTS_BASE}/OFL.txt"
 
 echo
 echo "Done. Asset sizes:"
-du -sh "${OUT}" "${ASSETS}/fonts"
+du -sh "${OUT}" "${ASSETS}/fonts" "${ASSETS}/basemap/tile_sizes.bin"

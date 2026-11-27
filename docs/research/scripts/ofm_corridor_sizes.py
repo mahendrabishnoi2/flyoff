@@ -1,6 +1,7 @@
 """Measure OpenFreeMap vector tile sizes inside Flyoff's flight corridors.
 
 Usage: python3 -I ofm_corridor_sizes.py [--seed N]
+       python3 -I ofm_corridor_sizes.py --directory PLANET_PMTILES_URL [--table TILE_SIZES_BIN]
 
 For each route below it counts every web-mercator tile at zooms 6-9 that has any part within
 175 km of the great-circle route (an independent check of the app's own tile cover), then
@@ -10,6 +11,13 @@ Flyoff. It prints, per route and zoom, the full tile count, the sample mean, p90
 size, both as sent over the wire (gzip) and decompressed, and the extrapolated corridor total
 (full count x sample mean) for zooms 6-8 and for zoom 9.
 
+With --directory it downloads no tiles: it reads only the directories of an OpenFreeMap planet
+PMTiles file (tools/basemap/tile_size_table.py), prints the stored size of the same sampled
+tiles (to compare with the sizes the tile server sent) and the exact stored total of each
+corridor, both as a strip at every zoom and in the app's download shape (every zoom-6 tile
+touching the strip and all its zoom-7 children, plus the strip at zoom 8 or 9). With --table it
+also prints the estimates the app's tile size table gives for those tiles.
+
 Standard library only. Tiles are not saved to disk.
 """
 import argparse
@@ -17,6 +25,7 @@ import concurrent.futures
 import gzip
 import json
 import math
+import os
 import random
 import statistics
 import sys
@@ -170,12 +179,72 @@ def pct(values, p):
     return s[min(len(s) - 1, max(0, math.ceil(p / 100 * len(s)) - 1))]
 
 
+# Raw (decompressed) bytes per stored (gzip) byte: the largest per-route ratio of the means
+# measured on 2026-11-27, rounded up. The app uses the same figures (TileSizes.kt).
+RAW_RATIO = {6: 1.8, 7: 1.6, 8: 1.55, 9: 1.55}
+
+
+def directory_report(url, table_path, rng):
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "tools", "basemap"))
+    import tile_size_table as tst
+    from pmtiles_read import HEADER_LEN, id_to_zxy, parse_header
+
+    read = tst.RangeReader(url)
+    header = parse_header(read(0, HEADER_LEN))
+    stored = {}
+    for tile_id, run, _offset, length in tst.tile_entries(read, header, tst.zoom_base(6), tst.zoom_base(10)):
+        for t in range(tile_id, tile_id + run):
+            if tst.zoom_base(6) <= t < tst.zoom_base(10):
+                stored[id_to_zxy(t)] = length
+    print(f"read {read.bytes_read:,} bytes of directories in {read.requests} requests")
+    table = tst.decode(open(table_path, "rb").read())[3] if table_path else None
+
+    def total(tiles):
+        return sum(stored.get(t, 0) for t in tiles)
+
+    def estimate(tiles, how, factor=1.0):
+        out = 0.0
+        for z, x, y in tiles:
+            mean, mx = table[z][(y >> (z - 5)) * 32 + (x >> (z - 5))]
+            out += RAW_RATIO[z] * (mean * factor if how == "mean" else mx)
+        return out
+
+    print("\nsampled tiles, stored KB mean (compare with the wire mean of the download run):")
+    shapes = {}
+    for name, (a, b) in ROUTES.items():
+        route = Route(a, b)
+        strip = {z: {(z, x, y) for x, y in corridor_tiles(route, z, HALF_WIDTH_M)} for z in ZOOMS}
+        for z in ZOOMS:
+            tiles = sorted((x, y) for _, x, y in strip[z])
+            sample = tiles if len(tiles) <= SAMPLE_PER_ZOOM else rng.sample(tiles, SAMPLE_PER_ZOOM)
+            print(f"  {name} z{z}: {statistics.mean(stored.get((z, x, y), 0) for x, y in sample) / 1e3:.1f}")
+        children = {(7, 2 * x + dx, 2 * y + dy) for _, x, y in strip[6] for dx in (0, 1) for dy in (0, 1)}
+        shapes[name] = {
+            "strip z6-8": strip[6] | strip[7] | strip[8],
+            "app z6-8": strip[6] | children | strip[8],
+            "z9": strip[9],
+        }
+    print("\nexact stored MB per corridor" + (" | estimated raw MB: mean x1.0  x1.25  x1.5  max" if table else ""))
+    for name, by_shape in shapes.items():
+        for shape, tiles in by_shape.items():
+            line = f"  {name} {shape:<10} {len(tiles):5d} tiles {total(tiles) / 1e6:6.1f}"
+            if table:
+                line += " | " + "  ".join(f"{estimate(tiles, 'mean', f) / 1e6:6.1f}" for f in (1.0, 1.25, 1.5))
+                line += f"  {estimate(tiles, 'max') / 1e6:6.1f}"
+            print(line)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=20261127)
     parser.add_argument("--count-only", action="store_true", help="print tile counts, download nothing")
+    parser.add_argument("--directory", metavar="URL", help="read this planet PMTiles directory instead of downloading tiles")
+    parser.add_argument("--table", metavar="BIN", help="with --directory: the app's tile_sizes.bin to compare")
     args = parser.parse_args()
     rng = random.Random(args.seed)
+    if args.directory:
+        return directory_report(args.directory, args.table, rng)
 
     req = urllib.request.Request(TILEJSON, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as r:
