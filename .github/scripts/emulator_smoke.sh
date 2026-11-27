@@ -22,6 +22,40 @@ mkdir -p "$OUT"
 
 fail() { echo "FAIL: $*" >&2; adb logcat -d > "$OUT/logcat.txt" || true; exit 1; }
 
+# A screen recording of the whole run, for people reviewing it (OUT/video/rec-N.mp4).
+# screenrecord stops after 180 s, so record back-to-back segments until told to stop.
+# Recording never fails the test: every step here is allowed to go wrong.
+REC_STOP="$OUT/.stop-recording"
+rec_start() {
+  mkdir -p "$OUT/video"
+  rm -f "$REC_STOP"
+  (
+    i=0
+    while [ ! -f "$REC_STOP" ]; do
+      adb shell screenrecord --time-limit 180 --size 540x1200 --bit-rate 1000000 "/sdcard/rec-$i.mp4" > /dev/null 2>&1 || true
+      i=$((i + 1))
+      sleep 1
+    done
+  ) &
+  REC_PID=$!
+}
+rec_stop() {
+  [ -n "${REC_PID:-}" ] || return 0
+  touch "$REC_STOP"
+  adb shell pkill -2 screenrecord > /dev/null 2>&1 || true  # SIGINT lets it finish the mp4
+  local f i
+  for i in $(seq 10); do kill -0 "$REC_PID" 2> /dev/null || break; sleep 1; done
+  kill "$REC_PID" 2> /dev/null || true
+  wait "$REC_PID" 2> /dev/null || true
+  REC_PID=
+  for f in $(adb shell ls /sdcard/ 2> /dev/null | tr -d '\r' | grep '^rec-.*\.mp4$'); do
+    adb pull "/sdcard/$f" "$OUT/video/$f" > /dev/null 2>&1 || true
+  done
+  find "$OUT/video" -name '*.mp4' -size -2k -delete 2> /dev/null || true
+  echo "screen recording: $(ls "$OUT/video" 2> /dev/null | wc -l) segment(s) in video/"
+}
+trap rec_stop EXIT
+
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; echo "screenshot $1: $(python3 -I "$SCRIPTS/png_colours.py" "$OUT/$1.png") colours"; }
 
 # Dump the UI to OUT/<name>.xml. uiautomator gives up ("could not get idle
@@ -220,6 +254,7 @@ adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 0
 adb logcat -c
 adb logcat -b crash -c
+rec_start
 adb shell am start -W -n "$PKG/.MainActivity"
 sleep 8
 no_crash "launch"
