@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      route:
+        description: "Route whose map the emulator test downloads, like LHR-JFK (a long one makes several downloads from OpenFreeMap)"
+        required: false
+        default: LHR-CDG
 
 permissions:
   contents: read
@@ -106,7 +111,8 @@ jobs:
     name: Emulator smoke test
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The route map download needs the network and can take several minutes.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -124,6 +130,9 @@ jobs:
 
       - name: Run smoke test on emulator
         uses: reactivecircus/android-emulator-runner@c9c93e6ba9c4194322e114c40970d5983d9a07cc # v2.38.0
+        env:
+          # A short route by default, to stay polite to OpenFreeMap.
+          FLYOFF_ROUTE: ${{ inputs.route || 'LHR-CDG' }}
         with:
           api-level: 35
           target: google_apis
