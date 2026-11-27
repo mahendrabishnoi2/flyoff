@@ -109,10 +109,11 @@ service_state() {
   python3 -I "$SCRIPTS/tracking_dumps.py" service "$OUT/$1.txt" "$PKG" FlightTrackingService || fail "not a services dump ($1.txt)"
 }
 
-# How many tracking notifications for LHR → JFK are posted.
+# How many tracking notifications for LHR → JFK are posted (its title is
+# "Tracking LHR → JFK"; matched without the arrow, in case dumpsys escapes it).
 tracking_notifications() {
   adb shell dumpsys notification --noredact > "$OUT/$1.txt"
-  python3 -I "$SCRIPTS/tracking_dumps.py" notification "$OUT/$1.txt" "$PKG" flight_tracking "Tracking LHR → JFK" ||
+  python3 -I "$SCRIPTS/tracking_dumps.py" notification "$OUT/$1.txt" "$PKG" flight_tracking "Tracking LHR .{1,8} JFK" ||
     fail "not a notification dump ($1.txt)"
 }
 
