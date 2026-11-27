@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
@@ -52,6 +54,7 @@ import io.github.mahendrabishnoi2.flyoff.flight.FlightStats
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStatsCalculator
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStore
 import io.github.mahendrabishnoi2.flyoff.flight.SimulationTimeline
+import io.github.mahendrabishnoi2.flyoff.flight.simulatorPosition
 import io.github.mahendrabishnoi2.flyoff.location.GpsState
 import io.github.mahendrabishnoi2.flyoff.location.LocationAccess
 import io.github.mahendrabishnoi2.flyoff.location.LocationPermission
@@ -64,6 +67,9 @@ import io.github.mahendrabishnoi2.flyoff.map.MapInsets
 import io.github.mahendrabishnoi2.flyoff.map.MapLibreMap
 import io.github.mahendrabishnoi2.flyoff.map.MapRoute
 import io.github.mahendrabishnoi2.flyoff.map.PanelBounds
+import io.github.mahendrabishnoi2.flyoff.map.FreeSide
+import io.github.mahendrabishnoi2.flyoff.map.freeSide
+import io.github.mahendrabishnoi2.flyoff.map.ornamentInsets
 import io.github.mahendrabishnoi2.flyoff.map.routePadding
 import kotlin.math.roundToInt
 
@@ -88,6 +94,10 @@ fun FlyoffScreen() {
     // The flight simulator. It belongs to one flight, and is ignored for any other.
     var simulation by rememberSaveable(stateSaver = SimulationStateSaver) { mutableStateOf<SimulationState?>(null) }
     val activeSimulation = simulation?.takeIf { plan != null && it.codes == plan.codes }
+    // After process death the saved flight (and any replay) waits for the airport list; until
+    // then it counts as set, so real GPS doesn't start and "Set up flight" doesn't flash.
+    val flightPending = plan == null && flightCodes != null && airports.state is AirportsState.Loading
+    val simulating = activeSimulation != null || (flightPending && simulation?.codes == flightCodes)
     val simulatorNow = rememberSimulationClock(activeSimulation)
     LaunchedEffect(activeSimulation, simulatorNow) {
         val sim = activeSimulation ?: return@LaunchedEffect
@@ -96,13 +106,19 @@ fun FlyoffScreen() {
         }
     }
     val simulatedPosition = if (plan != null && activeSimulation != null) {
-        plan.simulatedFlight.positionAt(activeSimulation.timeline.elapsedSeconds(simulatorNow), activeSimulation.takeoffMillis)
+        simulatorPosition(
+            flight = plan.simulatedFlight,
+            timeline = activeSimulation.timeline,
+            takeoffMillis = activeSimulation.takeoffMillis,
+            clockMillis = simulatorNow,
+            wallMillis = System.currentTimeMillis(),
+        )
     } else {
         null
     }
 
     // Real GPS is switched off while simulating, so a real fix can never mix with simulated ones.
-    val gps = rememberGpsUpdates(active = precise && activeSimulation == null)
+    val gps = rememberGpsUpdates(active = precise && !simulating)
     val position = simulatedPosition ?: gps.location?.toPosition()
     val mapLocation = remember(simulatedPosition, gps.location) { simulatedPosition?.toLocation() ?: gps.location }
     val stats = if (plan != null && position != null) {
@@ -145,7 +161,7 @@ fun FlyoffScreen() {
         )
         var panel by remember { mutableStateOf<PanelBounds?>(null) }
         // Keep MapLibre's attribution, logo and compass clear of the system bars and of the panel.
-        val ornamentInsets = safe.copy(bottom = panel?.let { heightPx - it.top } ?: safe.bottom)
+        val ornaments = ornamentInsets(widthPx, heightPx, panel, safe)
         val fitPadding = routePadding(widthPx, heightPx, panel, safe, margin = with(density) { 24.dp.roundToPx() })
 
         MapLibreMap(
@@ -157,18 +173,10 @@ fun FlyoffScreen() {
             fitRoute = route != null && !following && !cameraMovedByUser,
             routePadding = fitPadding,
             onCameraMovedByUser = { cameraMovedByUser = true },
-            ornamentInsets = ornamentInsets,
+            ornamentInsets = ornaments,
             onLoadFailed = { mapError = it },
             modifier = Modifier.fillMaxSize(),
         )
-        if (activeSimulation != null && !setupOpen) {
-            SimulatedBadge(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(top = 8.dp, start = 16.dp, end = 16.dp),
-            )
-        }
         // Not composed under the setup screen, so screen readers don't find it there.
         if (!setupOpen) Box(
             modifier = Modifier
@@ -193,10 +201,12 @@ fun FlyoffScreen() {
                     SimulatorControls(
                         speed = it.timeline.speed,
                         running = it.timeline.running,
-                        atStart = it.timeline.elapsedSeconds(simulatorNow) == 0.0,
+                        atStart = it.takeoffMillis == null,
                         finished = it.timeline.isFinished(simulatorNow),
                     )
                 },
+                simulating = simulating,
+                flightPending = flightPending,
                 showFollow = mapLocation != null,
                 following = following,
                 onFollowingChange = { following = it },
@@ -211,7 +221,8 @@ fun FlyoffScreen() {
                             SimulationTimeline.DEFAULT_SPEED,
                             now,
                         ),
-                        takeoffMillis = System.currentTimeMillis(),
+                        // Stamped on the first Start: waiting before it mustn't skew the ETA.
+                        takeoffMillis = null,
                     )
                 },
                 onSimulatorPlayPause = {
@@ -220,11 +231,11 @@ fun FlyoffScreen() {
                     simulation = if (sim.timeline.running) {
                         sim.copy(timeline = sim.timeline.paused(now))
                     } else {
-                        val replay = sim.timeline.isFinished(now)
+                        val takeOff = sim.takeoffMillis == null || sim.timeline.isFinished(now)
                         sim.copy(
                             timeline = sim.timeline.started(now),
-                            // A replay takes off now; resuming keeps the original take-off time.
-                            takeoffMillis = if (replay) System.currentTimeMillis() else sim.takeoffMillis,
+                            // The first Start and a replay take off now; resuming keeps the take-off time.
+                            takeoffMillis = if (takeOff) System.currentTimeMillis() else sim.takeoffMillis,
                         )
                     }
                 },
@@ -243,6 +254,28 @@ fun FlyoffScreen() {
                     }
                     // Anchored at the bottom: if the panel must scroll, the flight card stays in view.
                     .verticalScroll(rememberScrollState(), reverseScrolling = true),
+            )
+        }
+        // After the panel, so the panel can never draw over it; placed in the free map area.
+        if (simulating && !setupOpen) {
+            val freeSide = panel?.let { freeSide(widthPx, heightPx, it) } ?: FreeSide.ABOVE
+            val toDp = { px: Int -> with(density) { px.toDp() } }
+            SimulatedBadge(
+                Modifier
+                    .align(
+                        when (freeSide) {
+                            FreeSide.ABOVE -> Alignment.TopCenter
+                            // Absolute, like FreeSide: right of the panel even in right-to-left layouts.
+                            FreeSide.RIGHT -> AbsoluteAlignment.TopRight
+                            FreeSide.LEFT -> AbsoluteAlignment.TopLeft
+                        },
+                    )
+                    .absolutePadding(
+                        left = if (freeSide == FreeSide.RIGHT) toDp(panel?.right ?: 0) else 0.dp,
+                        right = if (freeSide == FreeSide.LEFT) toDp(widthPx - (panel?.left ?: widthPx)) else 0.dp,
+                    )
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 8.dp, start = 16.dp, end = 16.dp),
             )
         }
         if (setupOpen) {
@@ -286,6 +319,8 @@ private fun StatusPanel(
     stats: FlightStats?,
     eta: EtaText?,
     simulator: SimulatorControls?,
+    simulating: Boolean,
+    flightPending: Boolean,
     showFollow: Boolean,
     following: Boolean,
     onFollowingChange: (Boolean) -> Unit,
@@ -314,7 +349,7 @@ private fun StatusPanel(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (plan == null) {
+            if (plan == null && !flightPending) {
                 FilledTonalButton(onClick = onSetUpFlight) { Text(stringResource(R.string.set_up_flight)) }
             }
             if (showFollow) {
@@ -326,7 +361,7 @@ private fun StatusPanel(
             }
         }
         // While simulating, the real GPS is off and its state doesn't matter.
-        if (simulator == null) {
+        if (!simulating) {
             GpsStatus(permission, gps, showFix = plan == null, context = context)
         }
         if (plan != null) {

@@ -16,14 +16,16 @@ import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.Position
 import io.github.mahendrabishnoi2.flyoff.flight.SimulationTimeline
 import io.github.mahendrabishnoi2.flyoff.geo.LatLon
+import io.github.mahendrabishnoi2.flyoff.location.gpsCourse
 import kotlinx.coroutines.delay
 
 /**
  * A flight-simulator replay: which flight, its [timeline], and the wall-clock time of its
  * take-off ([takeoffMillis], so simulated fixes carry plausible times and the ETA is the
- * simulated flight's arrival).
+ * simulated flight's arrival). [takeoffMillis] is null until the replay is first started; the
+ * plane is parked at the origin until then.
  */
-data class SimulationState(val codes: FlightCodes, val timeline: SimulationTimeline, val takeoffMillis: Long)
+data class SimulationState(val codes: FlightCodes, val timeline: SimulationTimeline, val takeoffMillis: Long?)
 
 /**
  * Saves a replay across rotation and process death as plain values. The timeline's clock is
@@ -33,7 +35,7 @@ data class SimulationState(val codes: FlightCodes, val timeline: SimulationTimel
 val SimulationStateSaver: Saver<SimulationState?, Any> = Saver(
     save = { state ->
         state?.let {
-            arrayListOf<Any>(
+            arrayListOf<Any?>(
                 it.codes.origin, it.codes.destination, it.takeoffMillis,
                 it.timeline.durationSeconds, it.timeline.speed, it.timeline.running,
                 it.timeline.elapsedAtAnchor, it.timeline.anchorMillis,
@@ -45,7 +47,7 @@ val SimulationStateSaver: Saver<SimulationState?, Any> = Saver(
         runCatching {
             SimulationState(
                 codes = FlightCodes(v[0] as String, v[1] as String),
-                takeoffMillis = v[2] as Long,
+                takeoffMillis = v[2] as Long?,
                 timeline = SimulationTimeline(
                     durationSeconds = v[3] as Double,
                     speed = v[4] as Int,
@@ -103,6 +105,6 @@ fun Location.toPosition(): Position = Position(
     latLon = LatLon(latitude, longitude),
     altitudeMeters = if (hasAltitude()) altitude else null,
     speedMetersPerSecond = if (hasSpeed()) speed.toDouble() else null,
-    bearingDegrees = if (hasBearing()) bearing.toDouble() else null,
+    bearingDegrees = gpsCourse(hasBearing(), bearing, hasSpeed(), speed),
     timeMillis = time,
 )

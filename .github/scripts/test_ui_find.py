@@ -15,7 +15,9 @@ import ui_find
 DUMP = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
   <node index="0" text="" resource-id="" class="android.widget.FrameLayout" package="io.github.mahendrabishnoi2.flyoff" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" bounds="[0,0][1080,2400]">
-    <node index="0" text="Follow me" resource-id="" class="android.view.View" package="io.github.mahendrabishnoi2.flyoff" content-desc="" checkable="true" checked="true" clickable="true" enabled="true" bounds="[700,1500][1040,1596]" />
+    <node index="0" text="" resource-id="" class="android.view.View" package="io.github.mahendrabishnoi2.flyoff" content-desc="" checkable="true" checked="true" clickable="true" enabled="true" bounds="[700,1500][1040,1596]">
+      <node index="0" text="Follow me" resource-id="" class="android.widget.TextView" package="io.github.mahendrabishnoi2.flyoff" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" bounds="[742,1520][998,1576]" />
+    </node>
     <node index="1" text="LHR → JFK" resource-id="" class="android.widget.TextView" package="io.github.mahendrabishnoi2.flyoff" content-desc="Flight from London Heathrow Airport to John F Kennedy International Airport" checkable="false" checked="false" clickable="false" enabled="true" bounds="[84,1650][330,1710]" />
     <node index="2" text="" resource-id="" class="android.view.View" package="io.github.mahendrabishnoi2.flyoff" content-desc="Remaining: 5,120 km" checkable="false" checked="false" clickable="false" enabled="true" bounds="[84,1800][390,1880]" />
     <node index="3" text="" resource-id="" class="android.view.View" package="io.github.mahendrabishnoi2.flyoff" content-desc="Flown: 9.5 km" checkable="false" checked="false" clickable="false" enabled="true" bounds="[400,1800][700,1880]" />
@@ -86,9 +88,19 @@ class UiFindTest(unittest.TestCase):
     def test_number_needs_a_group(self):
         self.assertEqual(2, self.run_main("number", self.dump, "^Remaining")[0])
 
-    def test_attr(self):
+    def test_attr_reads_the_control_not_its_label(self):
+        # A Compose chip's words are in a child TextView that is never checked;
+        # the state is on the nearest checkable or clickable ancestor.
         self.assertEqual((0, "true"), self.run_main("attr", self.dump, "^Follow me$", "checked")[:2])
+        self.assertEqual((0, "true"), self.run_main("attr", self.dump, "^Follow me$", "checkable")[:2])
+
+    def test_attr_of_a_control_that_carries_its_own_words(self):
         self.assertEqual((0, "false"), self.run_main("attr", self.dump, "^Done$", "enabled")[:2])
+        self.assertEqual((0, "false"), self.run_main("attr", self.dump, "^300 times real time$", "checked")[:2])
+
+    def test_attr_of_plain_text_reads_the_node_itself(self):
+        # No clickable ancestor (the root FrameLayout isn't): the node's own value.
+        self.assertEqual((0, "false"), self.run_main("attr", self.dump, "LHR → JFK", "clickable")[:2])
 
     def test_a_bad_file_is_reported(self):
         bad = self.write("bad.xml", "ERROR: could not get idle state.")

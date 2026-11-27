@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -119,18 +120,16 @@ private fun Progress(progress: Double, text: String) {
     }
 }
 
-private val MIN_CELL_WIDTH = 100.dp
-
 /**
- * The stats in a grid of equal cells: three columns on a phone in portrait, more when wider.
- * The ETA takes two cells, as its text is the longest.
+ * The stats in a grid of equal cells: three columns on a phone in portrait, more when wider,
+ * fewer with large text ([statColumns]). The ETA takes two cells, as its text is the longest.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatsGrid(stats: FlightStats, eta: EtaText) {
     val locale = LocalConfiguration.current.locales[0]
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = (maxWidth / MIN_CELL_WIDTH).toInt().coerceIn(3, 6)
+        val columns = statColumns(maxWidth.value, LocalDensity.current.fontScale)
         val cell = maxWidth / columns
         FlowRow(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Stat(stringResource(R.string.stat_remaining), formatDistance(stats.distanceRemainingMeters, locale), cell)
@@ -165,7 +164,7 @@ private fun Stat(label: String, value: String, width: Dp) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Text(text = value, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+        Text(text = value, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -192,6 +191,7 @@ private fun SimulatorBar(
                     text = stringResource(R.string.simulated_flight),
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 val playPause = when {
@@ -221,7 +221,7 @@ private fun SimulatorBar(
                         icon = {},
                         modifier = Modifier.semantics { contentDescription = description },
                     ) {
-                        Text(stringResource(R.string.sim_speed, speed), maxLines = 1)
+                        Text(stringResource(R.string.sim_speed, speed), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

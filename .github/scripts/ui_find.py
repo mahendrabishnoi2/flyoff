@@ -10,7 +10,9 @@ Usage: python3 -I ui_find.py <command> <ui.xml> <regex> [attribute]
   center  print "x y", the centre of the first matching node, for `adb shell input tap`
   number  print the regex's first group from the first match, as a plain number
           ("5,540" gives 5540, "9.5" gives 9.5)
-  attr    print the first matching node's [attribute], such as checked or enabled
+  attr    print [attribute], such as checked or enabled, of the control the first
+          match belongs to: the nearest checkable or clickable node, itself or an
+          ancestor (a Compose chip's label is a child TextView that is never checked)
 
 Exits 1 with a message on stderr when nothing matches, 2 on a bad file.
 """
@@ -21,19 +23,18 @@ import xml.etree.ElementTree as ET
 BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
 
-def nodes(path):
+def load(path):
     try:
-        root = ET.parse(path).getroot()
+        return ET.parse(path).getroot()
     except (ET.ParseError, OSError) as e:
         print(f"{path}: not a uiautomator dump ({e})", file=sys.stderr)
         sys.exit(2)
-    return root.iter("node")
 
 
-def matches(path, pattern):
+def matches(root, pattern):
     """(node, match) for each node whose text or content-desc matches, in document order."""
     regex = re.compile(pattern)
-    for node in nodes(path):
+    for node in root.iter("node"):
         for key in ("text", "content-desc"):
             m = regex.search(node.get(key, ""))
             if m:
@@ -41,11 +42,22 @@ def matches(path, pattern):
                 break
 
 
-def first(path, pattern):
-    for found in matches(path, pattern):
+def first(root, path, pattern):
+    for found in matches(root, pattern):
         return found
     print(f"nothing matches '{pattern}' in {path}", file=sys.stderr)
     sys.exit(1)
+
+
+def control(root, node):
+    """The nearest checkable or clickable node from [node] up, or [node] if there is none."""
+    parents = {child: parent for parent in root.iter() for child in parent}
+    here = node
+    while here is not None and here.tag == "node":
+        if here.get("checkable") == "true" or here.get("clickable") == "true":
+            return here
+        here = parents.get(here)
+    return node
 
 
 def center(node):
@@ -68,9 +80,10 @@ def main(argv):
         print(__doc__, file=sys.stderr)
         return 2
     command, path, pattern = argv[1:4]
+    root = load(path)
     if command == "has":
-        return 0 if any(True for _ in matches(path, pattern)) else 1
-    node, m = first(path, pattern)
+        return 0 if any(True for _ in matches(root, pattern)) else 1
+    node, m = first(root, path, pattern)
     if command == "center":
         print("%d %d" % center(node))
     elif command == "number":
@@ -82,7 +95,7 @@ def main(argv):
         if len(argv) < 5:
             print("attr needs an attribute name", file=sys.stderr)
             return 2
-        print(node.get(argv[4], ""))
+        print(control(root, node).get(argv[4], ""))
     return 0
 
 

@@ -111,6 +111,7 @@ fun FlightSetupScreen(
         if (otherEmpty) {
             active = other
             searchFocus.requestFocus()
+            keyboard?.show()
         } else {
             keyboard?.hide()
         }
@@ -121,6 +122,7 @@ fun FlightSetupScreen(
         query = ""
         rejected = null
         searchFocus.requestFocus()
+        keyboard?.show()
     }
 
     BackHandler(onBack = onClose)

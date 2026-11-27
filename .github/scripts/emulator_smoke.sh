@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Smoke test Flyoff on a running emulator: install, grant location, launch,
 # feed fake GPS fixes, tap "Follow me", rotate, and check for crashes. Then set
-# up a flight (LHR to JFK), run the flight simulator and check its stats, set
-# up a flight across the antimeridian, and simulate without location permission.
+# up a flight (LHR to JFK), check the route is all on screen, run the flight
+# simulator and check its stats and that real GPS is off meanwhile, set up a
+# flight across the antimeridian, and simulate without location permission.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
 # Usage: emulator_smoke.sh <debug-apk> <out-dir>
@@ -48,10 +49,10 @@ find_xy() { python3 -I "$SCRIPTS/ui_find.py" center "$OUT/$1.xml" "$2" || fail "
 
 tap_xy() { adb shell input tap $1; }
 
-# Tap the node matching $2, re-dumping as $1 until its centre stops moving:
+# Centre "x y" of the node matching $2, re-dumping as $1 until it stops moving:
 # a panel that is still resizing (e.g. right after Stop) would make a stale
 # position land on the wrong control.
-tap() {
+settled_xy() {
   local name="$1" pattern="$2" xy prev i
   xy=$(find_xy "$name" "$pattern")
   for i in 1 2 3 4 5; do
@@ -62,7 +63,26 @@ tap() {
     [ "$xy" = "$prev" ] && break
   done
   [ "$xy" = "$prev" ] || fail "'$pattern' kept moving ($name)"
+  echo "$xy"
+}
+
+tap() {
+  local xy
+  xy=$(settled_xy "$1" "$2")
   tap_xy "$xy"
+}
+
+# "true" or "false": whether the "Follow me" chip in dump $1 is on. The state is
+# on the chip, not on its label (ui_find.py attr reads the control).
+follow_me() { python3 -I "$SCRIPTS/ui_find.py" attr "$OUT/$1.xml" "^Follow me$" checked || fail "no 'Follow me' ($1)"; }
+
+# Check screenshot $1 shows the whole route: wide, and not running off the screen.
+route_on_screen() { python3 -I "$SCRIPTS/route_span.py" "$OUT/$1.png" || fail "the route isn't all on screen ($1.png)"; }
+
+# How many GPS listeners the app has registered now; the dump goes to OUT/$1.txt.
+gps_listeners() {
+  adb shell dumpsys location > "$OUT/$1.txt"
+  python3 -I "$SCRIPTS/gps_listeners.py" "$OUT/$1.txt" "$PKG" || fail "no GPS provider in dumpsys location ($1.txt)"
 }
 
 # A number read from the first node matching $2, whose first group is the number.
@@ -142,6 +162,9 @@ ui 02-gps
 reject_text 02-gps "Waiting for GPS"
 expect_text 02-gps "GPS alt"
 shot 02-gps
+# The control for the simulator's "GPS off" check below: the listener shows here.
+listeners=$(gps_listeners dumpsys-02-gps)
+[ "$listeners" -ge 1 ] || fail "no GPS listener while tracking ($listeners, dumpsys-02-gps.txt)"
 
 echo "== Follow me"
 tap_text 02-gps "Follow me"
@@ -174,11 +197,14 @@ shot 05-resumed
 
 echo "== Flight setup: LHR to JFK"
 ui 06-before-setup
-# Step 03 turned "Follow me" on; turn it off so the camera shows the whole route.
-if [ "$(python3 -I "$SCRIPTS/ui_find.py" attr "$OUT/06-before-setup.xml" "^Follow me$" checked)" = "true" ]; then
-  tap 06-before-setup "^Follow me$"
-fi
-tap 06-before-setup "^Set up flight$"
+# Step 03 turned "Follow me" on (and it survived rotation and the background);
+# turn it off so the camera shows the whole route.
+[ "$(follow_me 06-before-setup)" = "true" ] || fail "'Follow me' should still be on (06-before-setup)"
+tap 06-before-setup "^Follow me$"
+sleep 1
+ui 06-follow-off
+[ "$(follow_me 06-follow-off)" = "false" ] || fail "'Follow me' didn't turn off (06-follow-off)"
+tap 06-follow-off "^Set up flight$"
 wait_for 06-setup "^From: Choose an airport$"
 pick_airport 06-pick-origin LHR
 wait_for 06-origin-picked "^From: LHR " 10
@@ -193,6 +219,7 @@ no_crash "flight setup"
 sleep 3 # the camera's fit animation
 shot 06-route
 python3 -I "$SCRIPTS/png_colours.py" "$OUT/06-route.png" 40 > /dev/null
+route_on_screen 06-route
 
 echo "== Flight simulator"
 tap 06-route "^Simulate flight$"
@@ -205,7 +232,7 @@ expect 07-sim-300 "^Start$"
 # Start, Pause and Resume are one button that keeps its place. While the replay
 # runs the screen changes every second and uiautomator can't dump it, so the
 # button is tapped where it was, and the UI is only read while paused.
-play=$(find_xy 07-sim-300 "^Start$")
+play=$(settled_xy 07-sim-300 "^Start$")
 tap_xy "$play"
 sleep 3
 no_crash "simulator start"
@@ -215,8 +242,17 @@ wait_for 07-sim-paused "^Resume$" 10
 expect 07-sim-paused "^Time left: "
 expect 07-sim-paused "^ETA: [0-9]{2}:[0-9]{2} "
 expect 07-sim-paused "^Speed: [0-9,]+ km/h$"
-reject 07-sim-paused "Waiting for GPS"
 before=$(read_number 07-sim-paused "^Remaining: ([0-9.,]+) km$")
+# Real GPS is off while simulating: no listener, and a real fix (at JFK, which
+# would make Remaining about 0) doesn't reach the stats.
+listeners=$(gps_listeners dumpsys-07-sim)
+[ "$listeners" = "0" ] || fail "GPS still on while simulating ($listeners listeners, dumpsys-07-sim.txt)"
+adb emu geo fix -73.78 40.64 10 8 0
+sleep 2
+ui 07-sim-geo-fix
+expect 07-sim-geo-fix "^Resume$"
+still=$(read_number 07-sim-geo-fix "^Remaining: ([0-9.,]+) km$")
+[ "$still" = "$before" ] || fail "a real GPS fix changed the simulated stats ($before km, then $still km)"
 tap 07-sim-paused "^Resume$"
 sleep 6
 no_crash "simulator running"
@@ -244,10 +280,16 @@ tap 09-sim-back "^Stop$"
 wait_for 10-sim-stopped "^Simulate flight$" 10
 reject 10-sim-stopped "^Simulated position"
 no_crash "simulator stop"
+# Real GPS is back. Feed it fixes now: a fix arriving later would grow the panel
+# under the next tap (CI run 45924020380 tapped beside "Change").
+fly
+wait_for 10-gps-back "^Remaining: " 15
+listeners=$(gps_listeners dumpsys-10-gps-back)
+[ "$listeners" -ge 1 ] || fail "GPS didn't come back after Stop ($listeners, dumpsys-10-gps-back.txt)"
 shot 10-sim-stopped
 
 echo "== Flight across the antimeridian: SYD to LAX"
-tap 10-sim-stopped "^Change$"
+tap 10-gps-back "^Change$"
 wait_for 11-change "^From: LHR " 10
 tap 11-change "^From: "
 sleep 1
@@ -263,6 +305,7 @@ no_crash "antimeridian"
 sleep 3
 shot 11-antimeridian
 python3 -I "$SCRIPTS/png_colours.py" "$OUT/11-antimeridian.png" 40 > /dev/null
+route_on_screen 11-antimeridian
 
 echo "== Simulator without location permission (and the flight kept across a restart)"
 # Revoking a permission kills the app, so this also restarts it.
@@ -274,7 +317,7 @@ expect 12-restarted "SYD → LAX|^Flight from Sydney"
 expect 12-restarted "^Allow location$"
 tap 12-restarted "^Simulate flight$"
 wait_for 12-sim-ready "^Start$" 10
-play=$(find_xy 12-sim-ready "^Start$")
+play=$(settled_xy 12-sim-ready "^Start$")
 tap_xy "$play"
 sleep 3
 shot 12-sim-no-permission

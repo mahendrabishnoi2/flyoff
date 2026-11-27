@@ -70,7 +70,7 @@ class SimulatedFlight(
     fun positionAt(elapsedSeconds: Double, startTimeMillis: Long): Position {
         require(elapsedSeconds >= 0.0) { "elapsed time $elapsedSeconds must not be negative" }
         val time = startTimeMillis + (elapsedSeconds * 1000).roundToLong()
-        if (elapsedSeconds > durationSeconds || routeLengthMeters == 0.0) {
+        if (elapsedSeconds >= durationSeconds || routeLengthMeters == 0.0) {
             return Position(destination, 0.0, 0.0, finalCourse, time)
         }
 

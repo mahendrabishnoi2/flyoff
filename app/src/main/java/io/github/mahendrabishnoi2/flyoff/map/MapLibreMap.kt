@@ -48,6 +48,12 @@ data class MapInsets(val left: Int = 0, val top: Int = 0, val right: Int = 0, va
 private const val FOLLOW_TRANSITION_MS = 750L
 private const val ROUTE_FIT_MS = 800
 
+/**
+ * The fitted route follows the panel's size, but not every small change (a stat wrapping).
+ * No more than the 24 dp margin FlyoffScreen fits with, so the route never slips under the panel.
+ */
+private val REFIT_THRESHOLD = 24.dp
+
 /** MapLibre's world is 512 dp wide at zoom 0. */
 private const val WORLD_SIZE_DP = 512.0
 
@@ -60,8 +66,8 @@ private const val WORLD_SIZE_DP = 512.0
  * @param following whether the camera follows the dot. A map gesture turns it off
  *   and reports that through [onFollowingChange].
  * @param route the flight's route to draw, or null for none.
- * @param fitRoute whether the camera should show the whole [route]. It is fitted again whenever
- *   the route, the padding or the view size changes while this stays true.
+ * @param fitRoute whether the camera should show the whole [route]. While this stays true it is
+ *   fitted again when the route or the view size changes, or the padding changes a lot.
  * @param routePadding space to keep the fitted route clear of (system bars, the panel), in pixels.
  * @param onCameraMovedByUser called when a map gesture starts moving the camera.
  * @param ornamentInsets space to keep free around the map's own attribution, logo and compass.
@@ -89,6 +95,7 @@ fun MapLibreMap(
     var nativeMap by remember(mapView) { mutableStateOf<NativeMap?>(null) }
     var styleLoaded by remember(mapView) { mutableStateOf(false) }
     var viewSize by remember(mapView) { mutableStateOf(IntSize.Zero) }
+    var lastFit by remember(mapView) { mutableStateOf<FitRequest?>(null) }
     val currentOnFollowingChange by rememberUpdatedState(onFollowingChange)
     val currentOnLoadFailed by rememberUpdatedState(onLoadFailed)
     val currentFollowing by rememberUpdatedState(following)
@@ -184,7 +191,12 @@ fun MapLibreMap(
 
     LaunchedEffect(styleLoaded, route, fitRoute, routePadding, viewSize, density) {
         val map = nativeMap ?: return@LaunchedEffect
-        if (!styleLoaded || !fitRoute || route == null) return@LaunchedEffect
+        if (!styleLoaded || !fitRoute || route == null) {
+            lastFit = null
+            return@LaunchedEffect
+        }
+        val request = FitRequest(route.points, viewSize.width, viewSize.height, routePadding)
+        if (!needsRefit(lastFit, request, thresholdPx = with(density) { REFIT_THRESHOLD.roundToPx() })) return@LaunchedEffect
         val fit = fitCamera(
             points = route.points,
             widthPx = viewSize.width,
@@ -201,6 +213,7 @@ fun MapLibreMap(
             .tilt(0.0)
             .build()
         map.animateCamera(CameraUpdateFactory.newCameraPosition(camera), ROUTE_FIT_MS)
+        lastFit = request
     }
 
     AndroidView(factory = { mapView }, modifier = modifier.onSizeChanged { viewSize = it })

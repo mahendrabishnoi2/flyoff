@@ -4,6 +4,7 @@ import io.github.mahendrabishnoi2.flyoff.flight.formatEta
 import java.text.NumberFormat
 import java.time.DateTimeException
 import java.util.Locale
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -67,11 +68,26 @@ fun formatHeading(degrees: Double?, locale: Locale): String {
     return "${NumberFormat.getIntegerInstance(locale).format(whole)}° ${compassPoint(whole.toDouble())}"
 }
 
-/** "42%" for a fraction of 0.42. */
+/**
+ * "42%" for a fraction of 0.42. It rounds down, so "100%" only shows on arrival, never with
+ * kilometres still to go.
+ */
 fun formatProgress(fraction: Double?, locale: Locale): String {
     if (fraction == null || fraction.isNaN()) return UNKNOWN
-    return NumberFormat.getPercentInstance(locale).format(fraction)
+    // The tiny nudge keeps 0.29 (28.999… in binary) at 29 %.
+    val percent = floor(fraction.coerceIn(0.0, 1.0) * 100 + 1e-9)
+    return NumberFormat.getPercentInstance(locale).format(percent / 100)
 }
+
+/** A stat cell needs about this much width at the normal font size. */
+private const val STAT_CELL_DP = 100f
+
+/**
+ * How many stat columns fit in [widthDp]: cells grow with the user's [fontScale], so large text
+ * gets fewer, wider columns. Never fewer than two (the ETA spans two cells).
+ */
+fun statColumns(widthDp: Float, fontScale: Float): Int =
+    floor(widthDp / (STAT_CELL_DP * fontScale.coerceAtLeast(1f))).toInt().coerceIn(2, 6)
 
 /** An arrival time ready to show; [inUtc] when it had to fall back to UTC. */
 data class EtaText(val text: String, val inUtc: Boolean)

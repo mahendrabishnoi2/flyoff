@@ -99,6 +99,34 @@ class SimulationTimelineTest {
         }
     }
 
+    private val lhr = io.github.mahendrabishnoi2.flyoff.geo.LatLon(51.47, -0.4543)
+    private val jfk = io.github.mahendrabishnoi2.flyoff.geo.LatLon(40.6398, -73.7789)
+    private val flight = SimulatedFlight(lhr, jfk)
+
+    @Test
+    fun `before the first start the plane is parked at the origin`() {
+        val timeline = SimulationTimeline.ready(flight.durationSeconds, 60, t0)
+        val wall = 1_795_000_000_000L
+        val parked = simulatorPosition(flight, timeline, takeoffMillis = null, clockMillis = t0 + 60_000, wallMillis = wall)
+        assertEquals(lhr, parked.latLon)
+        assertEquals(0.0, parked.speedMetersPerSecond!!, 0.0)
+        assertEquals(0.0, parked.altitudeMeters!!, 0.0)
+        assertEquals(wall, parked.timeMillis)
+        assertEquals(io.github.mahendrabishnoi2.flyoff.geo.Geodesy.initialBearingDegrees(lhr, jfk), parked.bearingDegrees!!, 1e-9)
+        // Parked, so no arrival estimate.
+        val stats = FlightStatsCalculator.compute(lhr, jfk, parked)
+        assertEquals(null, stats.etaMillis)
+        assertEquals(null, stats.timeRemainingSeconds)
+    }
+
+    @Test
+    fun `after take-off the plane flies from the take-off time`() {
+        val takeoff = 1_795_000_000_000L
+        val running = SimulationTimeline.ready(flight.durationSeconds, 60, t0).started(t0)
+        val position = simulatorPosition(flight, running, takeoffMillis = takeoff, clockMillis = t0 + 10_000, wallMillis = 0L)
+        assertEquals(flight.positionAt(600.0, takeoff), position)
+    }
+
     @Test
     fun `the offered speeds start at real time`() {
         assertEquals(listOf(1, 10, 60, 300), SimulationTimeline.SPEEDS)

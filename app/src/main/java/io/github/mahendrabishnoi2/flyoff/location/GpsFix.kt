@@ -31,6 +31,14 @@ fun GpsFix.showsBearing(shownNow: Boolean): Boolean {
     return speed >= if (shownNow) ARROW_OFF_SPEED else ARROW_ON_SPEED
 }
 
+/**
+ * The GPS course over the ground for the flight stats, or null when there is none worth
+ * showing: no bearing, or too slow for the bearing to mean anything (below [ARROW_OFF_SPEED],
+ * the same rule as the map's arrow). The stats then fall back to the course to the destination.
+ */
+fun gpsCourse(hasBearing: Boolean, bearing: Float, hasSpeed: Boolean, speed: Float): Double? =
+    if (hasBearing && hasSpeed && speed >= ARROW_OFF_SPEED) bearing.toDouble() else null
+
 fun metersPerSecondToKmh(speed: Float): Float = speed * 3.6f
 
 /**
