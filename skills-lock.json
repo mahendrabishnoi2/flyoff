@@ -25,6 +25,14 @@
       "computedHash": "efb368dd4c562a12469f11dc7fbf91d37ead49917010cffc768fecdd82fe8675",
       "installMode": "copy"
     },
+    "jetpack-compose-performance": {
+      "source": "android/skills",
+      "commit": "7f7b21730a605d112ca9f79b6e40105ce7b670ee",
+      "sourceType": "github",
+      "skillPath": "jetpack-compose/jetpack-compose-performance/SKILL.md",
+      "computedHash": "67cc0dad9d1684821c87d3f41535ef60e54bfebd019714c94374af2dc75c0104",
+      "installMode": "copy"
+    },
     "maplibre-native-gl-js-parity": {
       "source": "maplibre/maplibre-agent-skills",
       "commit": "821609d87b26b2b508153b53c27dd6c1181d0ad5",
