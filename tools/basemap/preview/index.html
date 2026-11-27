@@ -3,6 +3,9 @@
   Preview of app/src/main/assets/style/flyoff.json in MapLibre GL JS.
   Served by render.js, which also maps /assets/ to app/src/main/assets/.
   Query: ?lng=10&lat=50&zoom=4
+  Corridor mode (render.js --corridor) adds &corridor=1&maxzoom=8 to draw
+  style/corridor.json over the world map, merged as the app does, or
+  &corridor=0 for the same view without it; both draw the route line.
   GL JS is a stand-in for MapLibre Native here: close, but not proof.
 -->
 <html lang="en">
@@ -31,13 +34,46 @@
   const q = new URLSearchParams(location.search);
   window.previewErrors = [];
 
-  fetch(assets + 'style/flyoff.json')
-    .then((r) => r.json())
-    .then((style) => {
+  const json = (url) => fetch(url).then((r) => r.json());
+  const corridorMode = q.has('corridor');
+
+  /**
+   * corridor.json merged into flyoff.json the way the app does it: its two
+   * sources added, its "below-anchor" layers directly below the anchor layer
+   * (flyoff.json's lowest label layer) and its "above-anchor" layers directly
+   * above it, each block in file order.
+   */
+  function mergeCorridor(style, corridor, data, maxzoom) {
+    const anchor = corridor.metadata['flyoff:anchor'];
+    const at = style.layers.findIndex((l) => l.id === anchor);
+    if (at < 0) throw new Error(`flyoff.json has no anchor layer ${anchor}`);
+    const slot = (name) => corridor.layers.filter((l) => l.metadata['flyoff:slot'] === name);
+    style.layers.splice(at, 1, ...slot('below-anchor'), style.layers[at], ...slot('above-anchor'));
+    style.sources.corridor = { ...corridor.sources.corridor, tiles: [data.tiles], maxzoom };
+    style.sources['corridor-mask'] = { ...corridor.sources['corridor-mask'], data: data.mask };
+  }
+
+  /** The route as RouteLayers.kt draws it: the line under the labels, the end markers on top. */
+  function addRoute(map, data) {
+    const ends = [[data.route[0], 'LHR'], [data.route[data.route.length - 1], 'JFK']];
+    map.addSource('flyoff-route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: data.route } } });
+    map.addSource('flyoff-airports', { type: 'geojson', data: { type: 'FeatureCollection', features: ends.map(([p, iata]) => ({ type: 'Feature', properties: { iata }, geometry: { type: 'Point', coordinates: p } })) } });
+    map.addLayer({ id: 'flyoff-route-line', type: 'line', source: 'flyoff-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#c2185b', 'line-width': 3 } }, 'label-water');
+    map.addLayer({ id: 'flyoff-airport-dot', type: 'circle', source: 'flyoff-airports', paint: { 'circle-radius': 5, 'circle-color': '#c2185b', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'flyoff-airport-label', type: 'symbol', source: 'flyoff-airports', layout: { 'text-field': ['get', 'iata'], 'text-font': ['Noto Sans Medium'], 'text-size': 14, 'text-anchor': 'top', 'text-offset': [0, 0.6], 'text-allow-overlap': true }, paint: { 'text-color': '#7a0f3a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+  }
+
+  Promise.all([
+    json(assets + 'style/flyoff.json'),
+    corridorMode ? json(assets + 'style/corridor.json') : null,
+    corridorMode ? json('/corridor-data.json') : null,
+  ])
+    .then(([style, corridor, data]) => {
       for (const src of Object.values(style.sources)) {
         if (src.url) src.url = src.url.replace('pmtiles://asset://', 'pmtiles://' + assets);
       }
       style.glyphs = fromAsset(style.glyphs);
+      if (corridorMode && q.get('corridor') === '1') mergeCorridor(style, corridor, data, Number(q.get('maxzoom') ?? 8));
       const map = new maplibregl.Map({
         container: 'map',
         style,
@@ -46,7 +82,14 @@
         attributionControl: { compact: false },
         fadeDuration: 0,
       });
-      map.on('error', (e) => window.previewErrors.push(String(e.error?.message ?? e.error ?? e)));
+      map.on('error', (e) => {
+        // render.js fails requests for corridor tiles that touch no part of
+        // the strip (not downloaded). Like MapLibre Native offline, GL JS then
+        // draws the tile's parent instead, if that one was downloaded.
+        if (/^https:\/\/tiles\.openfreemap\.org\/.* \(0\)$/.test(`${e.error?.url} (${e.error?.status})`)) return;
+        window.previewErrors.push(String(e.error?.message ?? e.error ?? e));
+      });
+      map.once('load', () => { if (corridorMode) addRoute(map, data); });
       map.once('idle', () => { window.previewReady = true; });
       window.map = map;
     })

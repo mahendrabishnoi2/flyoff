@@ -27,3 +27,6 @@ local.properties
 
 # Python bytecode
 __pycache__/
+
+# Corridor preview screenshots: drawn from live OpenFreeMap tiles; attach them to the PR instead
+tools/basemap/preview/screenshots/corridor/
