@@ -8,12 +8,18 @@ import java.util.Locale
  *
  * Matching ignores case, accents and punctuation ("zurich" finds Zürich, "ohare"
  * finds O'Hare). Every word of the query must start a word of the airport's
- * city, name, IATA or ICAO code ("new york", "heath"). Results are ranked:
+ * city, name, IATA or ICAO code, or of its [Airport.keywords] ("new york",
+ * "heath", "nyc"). Results are ranked:
  *
  * 1. the query is the IATA code;
  * 2. the query is the ICAO code;
  * 3. the city or the name starts with the query;
- * 4. every query word starts some word.
+ * 4. a keyword starts with the query ("tokyo" finds Narita by its keyword "Tokyo");
+ * 5. every query word starts a word of the city, name or codes;
+ * 6. every query word starts a word of those or of the keywords.
+ *
+ * So a keyword match never outranks a city or name match: "new york" lists JFK
+ * and LaGuardia (city New York) before Newark (keyword "New York City").
  *
  * Within a rank, larger airports ([AirportSize]) come first, then airports in
  * the order of the list. The bundled file lists bigger airports (longer runway)
@@ -31,6 +37,9 @@ class AirportSearch(airports: List<Airport>) {
         val name = normalize(airport.name)
         val words: Array<String> =
             (city.split(' ') + name.split(' ') + iata + icao).filter { it.isNotEmpty() }.distinct().toTypedArray()
+        val keywords: Array<String> = airport.keywords.map(::normalize).filter { it.isNotEmpty() }.toTypedArray()
+        val keywordWords: Array<String> =
+            keywords.flatMap { it.split(' ') }.filter { it !in words }.distinct().toTypedArray()
     }
 
     private val entries = airports.mapIndexed { i, airport -> Entry(airport, i) }
@@ -64,7 +73,9 @@ class AirportSearch(airports: List<Airport>) {
         code == entry.iata -> 0
         code == entry.icao -> 1
         entry.city.startsWith(text) || entry.name.startsWith(text) -> 2
-        tokens.all { token -> entry.words.any { it.startsWith(token) } } -> 3
+        entry.keywords.any { it.startsWith(text) } -> 3
+        tokens.all { token -> entry.words.any { it.startsWith(token) } } -> 4
+        tokens.all { token -> entry.words.any { it.startsWith(token) } || entry.keywordWords.any { it.startsWith(token) } } -> 5
         else -> null
     }
 

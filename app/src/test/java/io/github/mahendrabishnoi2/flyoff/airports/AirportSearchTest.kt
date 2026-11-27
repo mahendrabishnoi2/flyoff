@@ -10,19 +10,36 @@ import org.junit.Test
 
 class AirportSearchTest {
 
-    private fun airport(iata: String, name: String, city: String, size: AirportSize = LARGE, icao: String? = null) =
-        Airport(iata, icao, name, city, "XX", 0.0, 0.0, size, "Etc/UTC")
+    private fun airport(
+        iata: String,
+        name: String,
+        city: String,
+        size: AirportSize = LARGE,
+        icao: String? = null,
+        keywords: List<String> = emptyList(),
+    ) = Airport(iata, icao, name, city, "XX", 0.0, 0.0, size, "Etc/UTC", keywords)
 
     // In the order of the bundled file: within a size, the biggest airport comes first.
     private val airports = listOf(
-        airport("LHR", "London Heathrow Airport", "London", icao = "EGLL"),
-        airport("LCY", "London City Airport", "London", MEDIUM, "EGLC"),
-        airport("LGW", "London Gatwick Airport", "London", icao = "EGKK"),
+        airport("LHR", "London Heathrow Airport", "London", icao = "EGLL", keywords = listOf("LON", "Londres")),
+        airport("LCY", "London City Airport", "London", MEDIUM, "EGLC", listOf("LON")),
+        airport("LGW", "London Gatwick Airport", "London", icao = "EGKK", keywords = listOf("LON", "Crawley")),
         airport("YXU", "London International Airport", "London", MEDIUM, "CYXU"),
         airport("ELS", "King Phalo Airport", "East London", icao = "FAEL"),
-        airport("JFK", "John F. Kennedy International Airport", "New York", icao = "KJFK"),
-        airport("LGA", "LaGuardia Airport", "New York", icao = "KLGA"),
+        // Matched by "london" only through keywords: a keyword prefix, then a later keyword word.
+        airport("OXF", "Oxford Airport", "Kidlington", MEDIUM, "EGTK", listOf("London Oxford Airport")),
+        airport("XGL", "Rochford Field", "Rochford", SMALL, keywords = listOf("RAF Rochford", "Greater London")),
+        airport("JFK", "John F. Kennedy International Airport", "New York", icao = "KJFK",
+            keywords = listOf("Manhattan", "New York City", "NYC", "Idlewild")),
+        airport("LGA", "LaGuardia Airport", "New York", icao = "KLGA", keywords = listOf("Manhattan", "New York City", "NYC")),
+        airport("EWR", "Newark Liberty International Airport", "Newark", icao = "KEWR",
+            keywords = listOf("Manhattan", "New York City", "NYC")),
         airport("SWF", "New York Stewart International Airport", "Newburgh", MEDIUM, "KSWF"),
+        airport("HND", "Tokyo Haneda International Airport", "Tokyo", icao = "RJTT", keywords = listOf("TYO")),
+        airport("NRT", "Narita International Airport", "Narita", icao = "RJAA",
+            keywords = listOf("TYO", "Tokyo", "New Tokyo International Airport")),
+        airport("BOM", "Chhatrapati Shivaji Maharaj International Airport", "Mumbai", icao = "VABB",
+            keywords = listOf("Bombay", "Sahar International Airport")),
         airport("ZRH", "Zürich Airport", "Zurich", icao = "LSZH"),
         airport("GRU", "São Paulo/Guarulhos–Governor André Franco Montoro International Airport", "São Paulo", icao = "SBGR"),
         airport("CGH", "Congonhas–Deputado Freitas Nobre Airport", "São Paulo", icao = "SBSP"),
@@ -55,8 +72,8 @@ class AirportSearchTest {
     @Test
     fun `byIata ignores case and returns the same airport`() {
         assertSame(airports[0], search.byIata("LHR"))
-        assertSame(airports[5], search.byIata("jfk"))
-        assertSame(airports[5], search.byIata(" Jfk "))
+        assertSame(airports[7], search.byIata("jfk"))
+        assertSame(airports[7], search.byIata(" Jfk "))
         assertNull(search.byIata("XXX"))
         assertNull(search.byIata(""))
     }
@@ -83,15 +100,35 @@ class AirportSearchTest {
 
     @Test
     fun `city search ranks larger airports first then list order`() {
-        // Gatwick is listed after London City, but it is large.
-        assertEquals(listOf("LHR", "LGW", "LCY", "YXU", "ELS"), codes("london"))
-        assertEquals(listOf("LHR", "LGW", "LCY", "YXU", "ELS"), codes("LONDON"))
+        // Gatwick is listed after London City, but it is large. Then: Oxford by a
+        // keyword prefix, East London by a later city word, and Rochford only by a
+        // later keyword word.
+        val london = listOf("LHR", "LGW", "LCY", "YXU", "OXF", "ELS", "XGL")
+        assertEquals(london, codes("london"))
+        assertEquals(london, codes("LONDON"))
+    }
+
+    @Test
+    fun `keywords find airports below city and name matches`() {
+        assertEquals(listOf("JFK", "LGA", "SWF", "EWR"), codes("new york"))
+        assertEquals(listOf("HND", "NRT"), codes("tokyo"))
+        assertEquals(listOf("JFK", "LGA", "EWR"), codes("nyc"))
+        assertEquals(listOf("HND", "NRT"), codes("tyo"))
+        assertEquals(listOf("BOM"), codes("bombay"))
+        assertEquals(listOf("JFK"), codes("idlewild"))
+        assertEquals(listOf("NRT"), codes("new tokyo"))
+        assertEquals(listOf("BOM"), codes("sahar"))
+    }
+
+    @Test
+    fun `query words may mix keywords with the name or city`() {
+        assertEquals(listOf("NRT"), codes("tokyo narita"))
+        assertEquals(listOf("LGW"), codes("crawley gatwick"))
     }
 
     @Test
     fun `multi-word queries match word prefixes`() {
-        assertEquals(listOf("JFK", "LGA", "SWF"), codes("new york"))
-        assertEquals(listOf("JFK", "LGA", "SWF"), codes("new yo"))
+        assertEquals(listOf("JFK", "LGA", "SWF", "EWR"), codes("new yo"))
         assertEquals(listOf("JFK"), codes("kennedy john"))
         assertEquals(listOf("JFK"), codes("john f kennedy"))
         assertEquals(listOf("ELS"), codes("east lon"))
@@ -127,6 +164,7 @@ class AirportSearchTest {
     @Test
     fun `limit caps the results`() {
         assertEquals(listOf("LHR", "LGW"), codes("london", limit = 2))
+        assertEquals(listOf("LHR", "LGW", "LCY", "YXU", "OXF"), codes("london", limit = 5))
         assertEquals(emptyList<String>(), codes("london", limit = 0))
     }
 }

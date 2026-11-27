@@ -31,9 +31,17 @@ with these tab-separated fields:
   lat, lon  decimal degrees, 4 decimals (about 11 m)
   size      L (large), M (medium), S (small) or O (other, e.g. seaplane base)
   tz        IANA time zone id, e.g. Europe/London
+  keywords  other names people search by, comma-separated, may be empty
+            (e.g. "TYO,Tokyo,New Tokyo International Airport" for Narita)
 
 No field contains a tab or a line break: every run of whitespace in a text field
-is replaced by one space, so no quoting or escaping is needed.
+is replaced by one space, so no quoting or escaping is needed. Keywords never
+contain commas (OurAirports separates them with commas too).
+
+Keywords come from OurAirports' "keywords" column, cleaned for search (see
+clean_keywords): only Latin-script entries, no identifier codes such as "10AK"
+or old ICAO codes, nothing whose words the name, city or codes already have,
+at most MAX_KEYWORDS entries of at most MAX_KEYWORD_LENGTH characters.
 
 Rows are ordered biggest first: by size, then longest open runway, then IATA
 code. The app's search uses this order to break ties, so "london" lists
@@ -51,6 +59,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.request
 import zipfile
 
@@ -80,10 +89,13 @@ INPUTS = {
 
 # ---- Format ----
 
-HEADER = ["iata", "icao", "name", "city", "country", "lat", "lon", "size", "tz"]
+HEADER = ["iata", "icao", "name", "city", "country", "lat", "lon", "size", "tz", "keywords"]
 SIZE_CODES = {"large_airport": "L", "medium_airport": "M", "small_airport": "S"}
 SIZE_RANK = {"L": 0, "M": 1, "S": 2, "O": 3}
 EXCLUDED_TYPES = {"heliport", "balloonport", "closed"}
+
+MAX_KEYWORDS = 5
+MAX_KEYWORD_LENGTH = 40
 
 # The build fails outside this range: a big change means upstream changed meaning.
 MIN_AIRPORTS = 3500
@@ -160,6 +172,50 @@ def longest_runways(runway_rows):
     return longest
 
 
+def search_words(text):
+    """Roughly what the app's search sees: lower case, no accents, letter/digit words.
+
+    Apostrophes join words (O'Hare -> ohare), like AirportSearch.normalize in the app.
+    """
+    text = unicodedata.normalize("NFKD", text.lower())
+    text = "".join(c for c in text if not unicodedata.combining(c) and c not in "'`\u00b4\u02b9\u02bb\u02bc\u02bd\u2018\u2019\u2032")
+    return re.sub(r"[^0-9a-z\u00c0-\u024f]+", " ", text).split()
+
+
+def is_latin(text):
+    """True if every letter is in the Latin script (accents allowed)."""
+    return all(unicodedata.name(c, "").startswith("LATIN") for c in text if c.isalpha())
+
+
+CODE_LIKE_RE = re.compile(r"\S*\d\S*|[A-Z0-9]{4}")
+
+
+def clean_keywords(raw, name, city, codes):
+    """Search aliases from an OurAirports keywords cell, noise removed.
+
+    Keeps, in upstream order, entries that are Latin script, not identifier
+    codes (a single word with a digit, like "10AK" or "K-33", or four capitals,
+    like an old ICAO code "ETSM"; three-letter city codes like "LON" stay), at
+    most MAX_KEYWORD_LENGTH characters, and add at least one word that the name,
+    city, codes and earlier keywords don't already have.
+    """
+    known = set(search_words(name)) | set(search_words(city)) | {c.lower() for c in codes if c}
+    kept = []
+    for entry in raw.split(","):
+        entry = "".join(c for c in clean(entry) if unicodedata.category(c) != "Cf").strip()
+        if (not entry or len(entry) > MAX_KEYWORD_LENGTH or not is_latin(entry)
+                or CODE_LIKE_RE.fullmatch(entry)):
+            continue
+        words = search_words(entry)
+        if not words or set(words) <= known:
+            continue
+        kept.append(entry)
+        known.update(words)
+        if len(kept) == MAX_KEYWORDS:
+            break
+    return kept
+
+
 def select_airports(rows, runways):
     """Filter OurAirports rows and turn them into output records (dicts)."""
     selected = []
@@ -178,6 +234,9 @@ def select_airports(rows, runways):
             "size": SIZE_CODES.get(row["type"], "O"),
             "runway": runways.get(row["ident"], 0),
             "ident": row["ident"],
+            "keywords": clean_keywords(row.get("keywords", ""), row["name"], row["municipality"],
+                                       [iata, row.get("icao_code", ""), row["ident"],
+                                        row.get("gps_code", ""), row.get("local_code", "")]),
         })
     return selected
 
@@ -312,6 +371,7 @@ def format_row(airport):
     return "\t".join([
         airport["iata"], airport["icao"], airport["name"], airport["city"], airport["country"],
         f"{airport['lat']:.4f}", f"{airport['lon']:.4f}", airport["size"], airport["tz"],
+        ",".join(airport["keywords"]),
     ])
 
 
@@ -363,6 +423,9 @@ def check(rows):
             problems.append(f"{where}: bad size {row['size']!r}")
         if not row["tz"] or not TZ_RE.fullmatch(row["tz"]):
             problems.append(f"{where}: bad time zone {row['tz']!r}")
+        keywords = row["keywords"].split(",") if row["keywords"] else []
+        if len(keywords) > MAX_KEYWORDS or any(not k or k != k.strip() or len(k) > MAX_KEYWORD_LENGTH for k in keywords):
+            problems.append(f"{where}: bad keywords {row['keywords']!r}")
         for key, value in row.items():
             if value != value.strip() or any(c in value for c in "\t\r\n"):
                 problems.append(f"{where}: {key} has stray whitespace")

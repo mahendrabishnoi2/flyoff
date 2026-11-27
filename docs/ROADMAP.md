@@ -54,7 +54,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 **Goal:** the user can set up a flight and see useful numbers.
 
 **Scope:**
-- Bundled airports: OurAirports filtered to those with scheduled service and an IATA code, each with its IANA time zone (4,077 airports, 339 KB; 141 KB compressed). ✅ Built by `tools/airports/build_airports.py`, with offline search (`AirportSearch`).
+- Bundled airports: OurAirports filtered to those with scheduled service and an IATA code, each with its IANA time zone and search keywords (4,077 airports, 369 KB; 155 KB compressed). ✅ Built by `tools/airports/build_airports.py`, with offline search (`AirportSearch`).
 - An origin and destination picker that searches by city, airport name or IATA code, offline.
 - The great-circle route drawn on the map.
 - Stats: altitude, ground speed, heading, distance flown and remaining, time remaining, and ETA in destination local time.

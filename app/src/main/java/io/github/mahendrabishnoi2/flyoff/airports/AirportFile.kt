@@ -5,14 +5,15 @@ package io.github.mahendrabishnoi2.flyoff.airports
  * `tools/airports/build_airports.py` (which documents the format).
  *
  * The file is UTF-8 text: a header line, then one airport per line with the
- * tab-separated fields `iata icao name city country lat lon size tz`. `icao`
- * and `city` may be empty; `size` is L, M, S or O. Fields never contain tabs or
- * line breaks, so there is no quoting or escaping.
+ * tab-separated fields `iata icao name city country lat lon size tz keywords`.
+ * `icao`, `city` and `keywords` may be empty; `size` is L, M, S or O; `keywords`
+ * is a comma-separated list of other names. Fields never contain tabs or line
+ * breaks and keywords never contain commas, so there is no quoting or escaping.
  */
 object AirportFile {
 
-    private const val HEADER = "iata\ticao\tname\tcity\tcountry\tlat\tlon\tsize\ttz"
-    private const val FIELDS = 9
+    private const val HEADER = "iata\ticao\tname\tcity\tcountry\tlat\tlon\tsize\ttz\tkeywords"
+    private const val FIELDS = 10
 
     private val iataPattern = Regex("[A-Z]{3}")
     private val icaoPattern = Regex("[A-Z0-9]{4}")
@@ -51,6 +52,8 @@ object AirportFile {
         val size = sizes[f[7]]
         require(size != null) { error("bad size '${f[7]}', expected one of ${sizes.keys}") }
         require(f[8].isNotBlank()) { error("empty time zone") }
+        val keywords = if (f[9].isEmpty()) emptyList() else f[9].split(',')
+        require(keywords.none { it.isBlank() }) { error("empty keyword in '${f[9]}'") }
         return Airport(
             iata = iata,
             icao = icao.ifEmpty { null },
@@ -61,6 +64,7 @@ object AirportFile {
             longitude = longitude,
             size = size,
             timeZone = f[8],
+            keywords = keywords,
         )
     }
 }

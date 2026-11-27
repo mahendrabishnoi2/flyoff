@@ -37,8 +37,10 @@ class BundledAirportsTest {
     }
 
     @Test
-    fun `london finds Heathrow first`() {
-        assertEquals("LHR", search.search("london").first().iata)
+    fun `london finds the London airports first`() {
+        val london = search.search("london").map { it.iata }
+        assertEquals(london.toString(), "LHR", london.first())
+        assertTrue(london.toString(), london.take(4).containsAll(listOf("LHR", "LGW", "STN", "LTN")))
     }
 
     @Test
@@ -49,6 +51,12 @@ class BundledAirportsTest {
         assertEquals("LHR", search.search("heathrow").first().iata)
         val newYork = search.search("new york").map { it.iata }
         assertTrue(newYork.toString(), newYork.take(2).containsAll(listOf("JFK", "LGA")))
+        assertTrue(newYork.toString(), "EWR" in newYork)
+        val tokyo = search.search("tokyo").map { it.iata }
+        assertEquals(tokyo.toString(), listOf("HND", "NRT"), tokyo.take(2))
+        val nyc = search.search("nyc").map { it.iata }
+        assertTrue(nyc.toString(), nyc.containsAll(listOf("JFK", "LGA", "EWR")))
+        assertEquals("BOM", search.search("bombay").first().iata)
         val saoPaulo = search.search("sao paulo").map { it.iata }
         assertTrue(saoPaulo.toString(), saoPaulo.take(2).containsAll(listOf("GRU", "CGH")))
     }
