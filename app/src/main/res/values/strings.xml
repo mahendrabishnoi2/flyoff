@@ -80,4 +80,27 @@
         <item quantity="one">Real time</item>
         <item quantity="other">%1$d times real time</item>
     </plurals>
+    <!-- Tracking -->
+    <string name="start_tracking">Start tracking</string>
+    <string name="stop_tracking">Stop tracking</string>
+    <plurals name="recording_track">
+        <item quantity="one">Recording track · %1$s point</item>
+        <item quantity="other">Recording track · %1$s points</item>
+    </plurals>
+    <string name="notifications_off">Notifications are off, so tracking shows only in Android\'s list of active apps.</string>
+    <string name="tracking_channel">Flight tracking</string>
+    <string name="tracking_channel_description">Shown while Flyoff records your flight with the screen off.</string>
+    <string name="tracking_stopped_title">Tracking stopped</string>
+    <string name="tracking_stopped_permission">Flyoff needs precise location to record your flight. Allow it, then start tracking again.</string>
+    <string name="tracking_stopped_not_allowed">Android didn\'t let tracking start. With Flyoff open, tap Start tracking again.</string>
+    <string name="tracking_stopped_no_gps">This device\'s GPS isn\'t available, so tracking stopped.</string>
+    <string name="ok">OK</string>
+
+    <!-- Battery Saver -->
+    <string name="battery_saver_title">Battery Saver is on</string>
+    <string name="battery_saver_body">Battery Saver may turn GPS off when the screen is off. Turn Battery Saver off before take-off.</string>
+    <string name="battery_saver_settings">Battery Saver settings</string>
+
+    <!-- Flight simulator: GPS gaps -->
+    <string name="sim_gps_gaps">GPS gaps</string>
 </resources>
