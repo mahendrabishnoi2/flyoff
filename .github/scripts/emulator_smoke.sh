@@ -182,11 +182,19 @@ ui 04-rotated
 expect_text 04-rotated "GPS alt"
 shot 04-rotated
 adb shell settings put system user_rotation 0
+# Let the activity finish recreating in portrait before leaving it.
+sleep 3
 
 echo "== Background and back"
 adb shell input keyevent KEYCODE_HOME
-sleep 3
-adb shell dumpsys location > "$OUT/dumpsys-location-background.txt" || true
+# GPS must stop in the background. A slow emulator can deliver onStop a few
+# seconds late, so wait for it rather than reading the first dump.
+for i in $(seq 15); do
+  sleep 1
+  listeners=$(gps_listeners dumpsys-location-background)
+  [ "$listeners" = "0" ] && break
+done
+[ "$listeners" = "0" ] || fail "GPS still on 15 s after going to the background ($listeners listeners, dumpsys-location-background.txt)"
 adb shell am start -W -n "$PKG/.MainActivity"
 sleep 3
 fly
