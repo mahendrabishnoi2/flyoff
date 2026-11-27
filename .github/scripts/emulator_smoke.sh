@@ -2,8 +2,12 @@
 # Smoke test Flyoff on a running emulator: install, grant location, launch,
 # feed fake GPS fixes, tap "Follow me", rotate, and check for crashes. Then set
 # up a flight (LHR to JFK), check the route is all on screen, run the flight
-# simulator and check its stats and that real GPS is off meanwhile, set up a
-# flight across the antimeridian, and simulate without location permission.
+# simulator and check its stats and that real GPS is off meanwhile. Then the
+# Milestone 3 checks: "GPS ready", tracking in a foreground service with its
+# notification, recording with the screen off, the estimated position during a
+# GPS drop-out, tracking in the background, Stop, simulated GPS gaps and the
+# Battery Saver warning. Last, set up a flight across the antimeridian, and
+# simulate without location permission.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
 # Usage: emulator_smoke.sh <debug-apk> <out-dir>
@@ -88,6 +92,47 @@ gps_listeners() {
 # A number read from the first node matching $2, whose first group is the number.
 read_number() { python3 -I "$SCRIPTS/ui_find.py" number "$OUT/$1.xml" "$2" || fail "no '$2' to read ($1)"; }
 
+# Like gps_listeners, but also fails when one of the app's GPS listeners is
+# throttled (background, inactive, or an interval over 60 s): see gps_listeners.py.
+gps_listeners_unthrottled() {
+  local code=0 count
+  adb shell dumpsys location > "$OUT/$1.txt"
+  count=$(python3 -I "$SCRIPTS/gps_listeners.py" "$OUT/$1.txt" "$PKG" --max-interval 60) || code=$?
+  [ "$code" = "3" ] && fail "the app's GPS listener is throttled ($1.txt)"
+  [ "$code" = "0" ] || fail "no gps provider in dumpsys location ($1.txt)"
+  echo "$count"
+}
+
+# The tracking service's state: foreground-location, foreground, started or absent.
+service_state() {
+  adb shell dumpsys activity services "$PKG" > "$OUT/$1.txt"
+  python3 -I "$SCRIPTS/tracking_dumps.py" service "$OUT/$1.txt" "$PKG" FlightTrackingService || fail "not a services dump ($1.txt)"
+}
+
+# How many tracking notifications for LHR → JFK are posted.
+tracking_notifications() {
+  adb shell dumpsys notification --noredact > "$OUT/$1.txt"
+  python3 -I "$SCRIPTS/tracking_dumps.py" notification "$OUT/$1.txt" "$PKG" flight_tracking "Tracking LHR → JFK" ||
+    fail "not a notification dump ($1.txt)"
+}
+
+# Run "$2 $1" (a state function above) until it prints $3, for up to $4 seconds.
+wait_state() {
+  local name="$1" probe="$2" want="$3" limit="$4" start=$SECONDS got
+  while true; do
+    got=$($probe "$name")
+    [ "$got" = "$want" ] && return 0
+    if ((SECONDS - start >= limit)); then fail "$probe is '$got', not '$want', after ${limit}s ($name.txt)"; fi
+    sleep 1
+  done
+}
+
+# The number of recorded track points the panel shows, from a fresh dump $1.
+track_points() {
+  ui "$1"
+  read_number "$1" "^Recording track · ([0-9,]+) points?$"
+}
+
 # Dump the UI as $1 until something matches $2, for up to $3 seconds (default 20).
 wait_for() {
   local name="$1" pattern="$2" limit="${3:-20}" start=$SECONDS
@@ -106,6 +151,17 @@ pick_airport() {
   adb shell input text "$code"
   wait_for "$step" "^$code, " 20
   tap "$step" "^$code, "
+}
+
+# Dump the UI as $1 until nothing matches $2, for up to $3 seconds (default 20).
+wait_gone() {
+  local name="$1" pattern="$2" limit="${3:-20}" start=$SECONDS
+  while true; do
+    ui "$name"
+    if ! has "$name" "$pattern"; then return 0; fi
+    if ((SECONDS - start >= limit)); then fail "'$pattern' still on screen after ${limit}s ($name)"; fi
+    sleep 1
+  done
 }
 
 reject_text() { if grep -q "$2" "$OUT/$1.xml"; then fail "'$2' unexpectedly on screen ($1)"; fi; }
@@ -268,6 +324,8 @@ shot 08-sim-later
 tap_xy "$play"
 wait_for 08-sim-paused "^Resume$" 10
 after=$(read_number 08-sim-paused "^Remaining: ([0-9.,]+) km$")
+# GPS gaps are off: the simulated fix is always current, never an estimate.
+reject 08-sim-paused "^Estimated position"
 echo "distance remaining: $before km, then $after km"
 python3 -I -c "import sys; sys.exit(0 if 0 < float(sys.argv[2]) < float(sys.argv[1]) else 1)" "$before" "$after" ||
   fail "distance remaining didn't go down while simulating ($before km, then $after km)"
@@ -301,8 +359,132 @@ listeners=$(gps_listeners dumpsys-10-gps-back)
 [ "$listeners" -ge 1 ] || fail "GPS didn't come back after Stop ($listeners, dumpsys-10-gps-back.txt)"
 shot 10-sim-stopped
 
+echo "== GPS ready check"
+fly
+wait_for 13-gps-ready "^GPS ready" 15
+expect 13-gps-ready "^Start tracking$"
+shot 13-gps-ready
+
+echo "== Start tracking"
+# The emulator is API 35: grant notifications so no dialog comes up.
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
+# Fresh fixes, so the panel doesn't switch to an estimate under the tap.
+fly
+tap 13-gps-ready "^Start tracking$"
+wait_for 14-tracking "^Recording track · " 15
+expect 14-tracking "^Stop tracking$"
+reject 14-tracking "^Simulate flight$"
+no_crash "start tracking"
+wait_state dumpsys-14-services service_state foreground-location 10
+wait_state dumpsys-14-notification tracking_notifications 1 10
+shot 14-tracking
+
+echo "== Screen off while tracking"
+before=$(track_points 15-before-sleep)
+adb shell input keyevent KEYCODE_SLEEP
+sleep 2
+adb shell dumpsys power > "$OUT/dumpsys-15-power.txt"
+if grep -q "mWakefulness=Awake" "$OUT/dumpsys-15-power.txt"; then fail "the screen didn't turn off (dumpsys-15-power.txt)"; fi
+# 35 fixes along 51.47N, one a second: about 7 reach the app at its 5 s interval.
+i=0
+for lon in $(LC_ALL=C seq -0.30 0.02 0.38); do
+  adb emu geo fix "$lon" 51.47 10000 8 450
+  i=$((i + 1))
+  if [ "$i" = 20 ]; then
+    listeners=$(gps_listeners_unthrottled dumpsys-15-screen-off)
+    [ "$listeners" -ge 1 ] || fail "no GPS listener with the screen off ($listeners, dumpsys-15-screen-off.txt)"
+    wait_state dumpsys-15-services-screen-off service_state foreground-location 1
+  fi
+  sleep 1
+done
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+wait_for 15-woken "^Recording track · " 20
+no_crash "screen off"
+after=$(track_points 15-woken)
+echo "track points: $before before the screen went off, $after after"
+[ "$after" -ge $((before + 4)) ] || fail "fixes sent with the screen off weren't recorded ($before points, then $after)"
+shot 15-after-screen-off
+
+echo "== GPS drop-out while tracking"
+fly
+# No fixes from here on: after 10 s the dot becomes an estimate and keeps moving.
+sleep 12
+wait_for 16-estimate "^Estimated position · last GPS fix" 20
+first=$(read_number 16-estimate "^Remaining: ([0-9.,]+) km$")
+shot 16-estimate
+sleep 10
+wait_for 16-estimate-later "^Estimated position · last GPS fix" 10
+later=$(read_number 16-estimate-later "^Remaining: ([0-9.,]+) km$")
+echo "estimated distance remaining: $first km, then $later km"
+python3 -I -c "import sys; sys.exit(0 if float(sys.argv[2]) < float(sys.argv[1]) else 1)" "$first" "$later" ||
+  fail "the estimate didn't move on without fixes ($first km, then $later km)"
+no_crash "drop-out"
+
+echo "== Background while tracking"
+adb shell input keyevent KEYCODE_HOME
+sleep 3
+listeners=$(gps_listeners_unthrottled dumpsys-17-background)
+[ "$listeners" -ge 1 ] || fail "tracking lost its GPS listener in the background ($listeners, dumpsys-17-background.txt)"
+wait_state dumpsys-17-services service_state foreground-location 1
+adb shell am start -W -n "$PKG/.MainActivity"
+fly
+wait_for 17-back "^Recording track · " 15
+no_crash "background while tracking"
+
+echo "== Stop tracking"
+tap 17-back "^Stop tracking$"
+wait_for 18-stopped "^Start tracking$" 15
+wait_state dumpsys-18-services service_state absent 10
+wait_state dumpsys-18-notification tracking_notifications 0 10
+no_crash "stop tracking"
+shot 18-stopped
+
+echo "== Simulator with GPS gaps"
+tap 18-stopped "^Simulate flight$"
+wait_for 19-sim-ready "^Start$" 10
+reject 19-sim-ready "^Start tracking$"
+tap 19-sim-ready "^300 times real time$"
+ui 19-sim-300
+[ "$(python3 -I "$SCRIPTS/ui_find.py" attr "$OUT/19-sim-300.xml" "^GPS gaps$" checked)" = "false" ] || fail "'GPS gaps' should start off (19-sim-300)"
+tap 19-sim-300 "^GPS gaps$"
+ui 19-gaps-on
+[ "$(python3 -I "$SCRIPTS/ui_find.py" attr "$OUT/19-gaps-on.xml" "^GPS gaps$" checked)" = "true" ] || fail "'GPS gaps' didn't turn on (19-gaps-on)"
+# LHR to JFK lasts about 77 s at 300x; the first gap is from 30 % to 40 % of it,
+# about 23 s to 31 s after Start. Pause in its middle: the estimate stays on screen.
+play=$(settled_xy 19-gaps-on "^Start$")
+tap_xy "$play"
+sleep 25
+shot 19-sim-gap
+tap_xy "$play"
+wait_for 19-sim-gap-paused "^Resume$" 10
+expect 19-sim-gap-paused "^Estimated position · last GPS fix"
+expect 19-sim-gap-paused "^Simulated position"
+tap 19-sim-gap-paused "^Stop$"
+wait_for 19-sim-stopped "^Simulate flight$" 10
+no_crash "simulator gaps"
+
+echo "== Battery Saver warning"
+fly
+ui 20-before-saver
+reject 20-before-saver "^Battery Saver is on$|^Battery Saver may turn GPS off"
+# Battery Saver can't be on while charging, so unplug the emulator's battery,
+# and use the location mode that turns GPS off with the screen off.
+adb shell dumpsys battery unplug
+adb shell settings put global battery_saver_constants "location_mode=1"
+adb shell cmd power set-mode 1
+sleep 2
+adb shell dumpsys power > "$OUT/dumpsys-20-power.txt"
+wait_for 20-battery-saver "^Battery Saver is on$|^Battery Saver may turn GPS off" 20
+shot 20-battery-saver
+adb shell cmd power set-mode 0
+adb shell settings delete global battery_saver_constants
+adb shell dumpsys battery reset
+wait_gone 20-saver-off "^Battery Saver is on$|^Battery Saver may turn GPS off" 20
+no_crash "battery saver"
+
 echo "== Flight across the antimeridian: SYD to LAX"
-tap 10-gps-back "^Change$"
+tap 20-saver-off "^Change$"
 wait_for 11-change "^From: LHR " 10
 tap 11-change "^From: "
 sleep 1
