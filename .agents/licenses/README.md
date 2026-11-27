@@ -10,3 +10,4 @@ The skills in `../skills/` were installed with the `skills` CLI. Their sources a
 | testing-setup | [android/skills](https://github.com/android/skills) | Apache-2.0 ([android-skills.LICENSE.txt](android-skills.LICENSE.txt)) |
 | android-testing | [rcosteira79/android-skills](https://github.com/rcosteira79/android-skills) | MIT ([rcosteira79-android-skills.LICENSE.txt](rcosteira79-android-skills.LICENSE.txt)) |
 | jetpack-compose-performance | [android/skills](https://github.com/android/skills) | Apache-2.0 ([android-skills.LICENSE.txt](android-skills.LICENSE.txt)) |
+| android-profiler | [android/skills](https://github.com/android/skills) | Apache-2.0 ([android-skills.LICENSE.txt](android-skills.LICENSE.txt)); its bundled `trace_processor` wrapper is Apache-2.0, © The Android Open Source Project |
