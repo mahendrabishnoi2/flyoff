@@ -48,8 +48,11 @@ data class MapInsets(val left: Int = 0, val top: Int = 0, val right: Int = 0, va
 private const val FOLLOW_TRANSITION_MS = 750L
 private const val ROUTE_FIT_MS = 800
 
-/** The fitted route follows the panel's size, but not every small change (a stat wrapping). */
-private val REFIT_THRESHOLD = 48.dp
+/**
+ * The fitted route follows the panel's size, but not every small change (a stat wrapping).
+ * No more than the 24 dp margin FlyoffScreen fits with, so the route never slips under the panel.
+ */
+private val REFIT_THRESHOLD = 24.dp
 
 /** MapLibre's world is 512 dp wide at zoom 0. */
 private const val WORLD_SIZE_DP = 512.0
