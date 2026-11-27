@@ -1,4 +1,5 @@
-"""Read a local PMTiles v3 archive. Standard library only.
+"""Read PMTiles v3 archives: local files (Archive) or, with parse_header and
+parse_directory, directories fetched over HTTP. Standard library only.
 
 Spec: https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md
 """
@@ -18,7 +19,27 @@ def _varint(b, i):
             return value, i
 
 
-def _directory(raw, compressed):
+HEADER_LEN = 127
+
+
+def parse_header(d):
+    """The fixed 127-byte header as a dict. Raises ValueError if it isn't PMTiles v3."""
+    if len(d) < HEADER_LEN or d[:7] != b"PMTiles" or d[7] != 3:
+        raise ValueError("not a PMTiles v3 archive")
+    keys = ("root_off", "root_len", "meta_off", "meta_len", "leaf_off", "leaf_len",
+            "data_off", "data_len", "addressed", "entries", "contents")
+    h = dict(zip(keys, struct.unpack("<11Q", d[8:96])))
+    h.update(internal_gzip=d[97] == 2, tile_compression=d[98], tile_gzip=d[98] == 2, tile_type=d[99],
+             min_zoom=d[100], max_zoom=d[101],
+             bounds=[v / 1e7 for v in struct.unpack("<4i", d[102:118])],
+             center_zoom=d[118], center=[v / 1e7 for v in struct.unpack("<2i", d[119:127])])
+    return h
+
+
+def parse_directory(raw, compressed):
+    """Directory entries (tile_id, run_length, offset, length). run_length 0 marks a leaf
+    directory at offset/length within the leaf section; otherwise the entry stands for
+    run_length consecutive tile ids that all have the same tile bytes."""
     b = gzip.decompress(raw) if compressed else raw
     n, i = _varint(b, 0)
     cols = []
@@ -69,19 +90,21 @@ class Archive:
     def __init__(self, path):
         with open(path, "rb") as f:
             self.data = f.read()
-        d = self.data
-        if d[:7] != b"PMTiles" or d[7] != 3:
-            raise ValueError(f"{path}: not a PMTiles v3 archive")
-        (self.root_off, self.root_len, self.meta_off, self.meta_len,
-         self.leaf_off, self.leaf_len, self.data_off, self.data_len,
-         _addressed, _entries, _contents) = struct.unpack("<11Q", d[8:96])
-        self.internal_gzip = d[97] == 2
-        self.tile_gzip = d[98] == 2
-        self.tile_type = d[99]
-        self.min_zoom, self.max_zoom = d[100], d[101]
-        self.bounds = [v / 1e7 for v in struct.unpack("<4i", d[102:118])]
-        self.center_zoom = d[118]
-        self.center = [v / 1e7 for v in struct.unpack("<2i", d[119:127])]
+        try:
+            h = parse_header(self.data)
+        except ValueError:
+            raise ValueError(f"{path}: not a PMTiles v3 archive") from None
+        self.root_off, self.root_len = h["root_off"], h["root_len"]
+        self.meta_off, self.meta_len = h["meta_off"], h["meta_len"]
+        self.leaf_off, self.leaf_len = h["leaf_off"], h["leaf_len"]
+        self.data_off, self.data_len = h["data_off"], h["data_len"]
+        self.internal_gzip = h["internal_gzip"]
+        self.tile_gzip = h["tile_gzip"]
+        self.tile_type = h["tile_type"]
+        self.min_zoom, self.max_zoom = h["min_zoom"], h["max_zoom"]
+        self.bounds = h["bounds"]
+        self.center_zoom = h["center_zoom"]
+        self.center = h["center"]
 
     def metadata(self):
         raw = self.data[self.meta_off:self.meta_off + self.meta_len]
@@ -92,7 +115,7 @@ class Archive:
         out, stack = [], [(self.root_off, self.root_len)]
         while stack:
             off, ln = stack.pop()
-            for e in _directory(self.data[off:off + ln], self.internal_gzip):
+            for e in parse_directory(self.data[off:off + ln], self.internal_gzip):
                 if e[1] == 0:
                     stack.append((self.leaf_off + e[2], e[3]))
                 else:
