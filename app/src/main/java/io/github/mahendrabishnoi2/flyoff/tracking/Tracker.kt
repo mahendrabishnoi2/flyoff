@@ -5,13 +5,17 @@ import android.content.Intent
 import android.location.Location
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.TrackPoint
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 /** Why tracking stopped on its own (or couldn't start), for the UI to explain. */
 enum class TrackingError {
@@ -55,6 +59,15 @@ object Tracker {
 
     private val visible = MutableStateFlow(false)
 
+    /** Track file I/O: one task at a time, in the order asked, off the main thread. */
+    internal val fileIo = Dispatchers.IO.limitedParallelism(1)
+
+    /**
+     * Appends belong to the process, not to the service: stopping the service must not cancel
+     * a point that is still waiting to be written.
+     */
+    private val fileWrites = CoroutineScope(SupervisorJob() + fileIo)
+
     /** Whether the app's screen is visible; the service asks for fixes more often then. */
     val uiVisible: StateFlow<Boolean> = visible.asStateFlow()
 
@@ -94,20 +107,31 @@ object Tracker {
     /** Reads the recorded track of [codes] from the file, unless it is loaded or being recorded. */
     suspend fun loadTrack(context: Context, codes: FlightCodes) {
         if (state.value.trackCodes == codes) return
-        val points = withContext(Dispatchers.IO) { TrackFile(trackFile(context)).read(codes, System.currentTimeMillis()) }
+        val points = withContext(fileIo) { TrackFile(trackFile(context)).read(codes, System.currentTimeMillis()) }
         mutableState.update { if (it.active) it else it.copy(trackCodes = codes, track = points) }
     }
 
     /** Deletes the recorded track: the flight was changed or cleared. Stop tracking first. */
     suspend fun forgetTrack(context: Context) {
         mutableState.update { it.copy(trackCodes = null, track = emptyList()) }
-        withContext(Dispatchers.IO) { TrackFile(trackFile(context)).delete() }
+        withContext(fileIo) { TrackFile(trackFile(context)).delete() }
     }
 
     /** The one track file: it belongs to one flight at a time (its header says which). */
     fun trackFile(context: Context): File = File(context.filesDir, "track.log")
 
     // Called by FlightTrackingService on the main thread.
+
+    /** Writes [point] to [file] soon, after anything already queued; it isn't cancelled by a stop. */
+    internal fun appendLater(file: TrackFile, point: TrackPoint) {
+        fileWrites.launch {
+            try {
+                file.append(point)
+            } catch (_: IOException) {
+                // Storage full: the point stays in memory and on the map.
+            }
+        }
+    }
 
     internal fun onStarted(flight: TrackedFlight, track: List<TrackPoint>) {
         mutableState.update { it.copy(flight = flight, trackCodes = flight.codes, track = track, error = null) }

@@ -46,7 +46,8 @@ import java.io.IOException
  * While it runs it owns the GPS (the UI stops its own listener): [LocationManager.GPS_PROVIDER]
  * only, no network and no Play services, a fix every second while the app is visible and every
  * 5 s otherwise. No wake lock: the GPS fixes themselves wake the app. Points go through a
- * [TrackDecimator] (one per 5 s) into [Tracker] and the [TrackFile].
+ * [TrackDecimator] (one per 5 s) into [Tracker] and the [TrackFile]; the writes are queued in
+ * [Tracker], so a stop never drops the newest point.
  *
  * It stops when the user taps Stop (in the app or the notification), when the flight is
  * changed or cleared (the UI stops it), or when location permission is missing. If the user
@@ -61,9 +62,6 @@ import java.io.IOException
 class FlightTrackingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
-    /** File writes run one at a time, in order, off the main thread. */
-    private val io = Dispatchers.IO.limitedParallelism(1)
 
     private lateinit var locationManager: LocationManager
     private lateinit var notifications: NotificationManager
@@ -83,13 +81,7 @@ class FlightTrackingService : Service() {
             )
             if (decimator.accept(point)) {
                 Tracker.onPoint(point)
-                scope.launch(io) {
-                    try {
-                        trackFile.append(point)
-                    } catch (_: IOException) {
-                        // Storage full: the point stays in memory and on the map.
-                    }
-                }
+                Tracker.appendLater(trackFile, point)
             }
         }
 
@@ -134,6 +126,8 @@ class FlightTrackingService : Service() {
     override fun onDestroy() {
         locationManager.removeUpdates(listener)
         scope.cancel()
+        // The 15 s refresh may have re-posted the notification; it must not outlive the service.
+        notifications.cancel(NOTIFICATION_ID)
         Tracker.onStopped(null)
         super.onDestroy()
     }
@@ -167,7 +161,7 @@ class FlightTrackingService : Service() {
         jobs = listOf(
             scope.launch {
                 // Load (or start) the file before the first fix, so no point is lost or doubled.
-                val points = withContext(io) {
+                val points = withContext(Tracker.fileIo) {
                     try {
                         trackFile.open(requested.codes, System.currentTimeMillis())
                     } catch (_: IOException) {
