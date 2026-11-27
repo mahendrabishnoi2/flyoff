@@ -27,6 +27,8 @@ ROUTE="${FLYOFF_ROUTE:-LHR-CDG}"
 [[ "$ROUTE" =~ ^[A-Z]{3}-[A-Z]{3}$ ]] || { echo "FAIL: FLYOFF_ROUTE '$ROUTE' isn't like LHR-CDG" >&2; exit 1; }
 ROUTE_FROM="${ROUTE%-*}"
 ROUTE_TO="${ROUTE#*-}"
+# The flight card's route map download button, shown once the download is planned.
+DOWNLOAD_BUTTON="^Download route map \(up to [0-9]+ MB\)$|^Part [0-9]+ of [0-9]+ · up to [0-9]+ MB$"
 mkdir -p "$OUT"
 
 fail() { echo "FAIL: $*" >&2; adb logcat -d > "$OUT/logcat.txt" || true; exit 1; }
@@ -342,6 +344,9 @@ wait_for 06-route "^Simulate flight$" 10
 expect 06-route "LHR → JFK|^Flight from London Heathrow"
 expect 06-route "^[0-9,]+ km route$"
 no_crash "flight setup"
+# The route map's size and button make the panel taller once worked out (a few
+# seconds on a long route), and the camera fits the route again.
+wait_for 06-route-plan "$DOWNLOAD_BUTTON" 60
 sleep 3 # the camera's fit animation
 shot 06-route
 python3 -I "$SCRIPTS/png_colours.py" "$OUT/06-route.png" 40 > /dev/null
@@ -614,6 +619,7 @@ wait_for 11-picked "^To: LAX " 10
 tap 11-picked "^Done$"
 wait_for 11-antimeridian "SYD → LAX|^Flight from Sydney" 10
 no_crash "antimeridian"
+wait_for 11-antimeridian-plan "$DOWNLOAD_BUTTON" 60
 sleep 3
 shot 11-antimeridian
 python3 -I "$SCRIPTS/png_colours.py" "$OUT/11-antimeridian.png" 40 > /dev/null
@@ -663,7 +669,6 @@ sleep 1
 pick_airport 21-pick-destination "$ROUTE_TO"
 wait_for 21-picked "^To: $ROUTE_TO " 10
 tap 21-picked "^Done$"
-DOWNLOAD_BUTTON="^Download route map \(up to [0-9]+ MB\)$|^Part [0-9]+ of [0-9]+ · up to [0-9]+ MB$"
 wait_for 21-route "$DOWNLOAD_BUTTON" 60
 reject 21-route "^Ready for offline"
 expect 21-route "Wi-Fi"
