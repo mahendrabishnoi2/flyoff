@@ -89,6 +89,10 @@ fun FlyoffScreen() {
     // The flight simulator. It belongs to one flight, and is ignored for any other.
     var simulation by rememberSaveable(stateSaver = SimulationStateSaver) { mutableStateOf<SimulationState?>(null) }
     val activeSimulation = simulation?.takeIf { plan != null && it.codes == plan.codes }
+    // After process death the saved flight (and any replay) waits for the airport list; until
+    // then it counts as set, so real GPS doesn't start and "Set up flight" doesn't flash.
+    val flightPending = plan == null && flightCodes != null && airports.state is AirportsState.Loading
+    val simulating = activeSimulation != null || (flightPending && simulation?.codes == flightCodes)
     val simulatorNow = rememberSimulationClock(activeSimulation)
     LaunchedEffect(activeSimulation, simulatorNow) {
         val sim = activeSimulation ?: return@LaunchedEffect
@@ -109,7 +113,7 @@ fun FlyoffScreen() {
     }
 
     // Real GPS is switched off while simulating, so a real fix can never mix with simulated ones.
-    val gps = rememberGpsUpdates(active = precise && activeSimulation == null)
+    val gps = rememberGpsUpdates(active = precise && !simulating)
     val position = simulatedPosition ?: gps.location?.toPosition()
     val mapLocation = remember(simulatedPosition, gps.location) { simulatedPosition?.toLocation() ?: gps.location }
     val stats = if (plan != null && position != null) {
@@ -168,7 +172,7 @@ fun FlyoffScreen() {
             onLoadFailed = { mapError = it },
             modifier = Modifier.fillMaxSize(),
         )
-        if (activeSimulation != null && !setupOpen) {
+        if (simulating && !setupOpen) {
             SimulatedBadge(
                 Modifier
                     .align(Alignment.TopCenter)
@@ -204,6 +208,8 @@ fun FlyoffScreen() {
                         finished = it.timeline.isFinished(simulatorNow),
                     )
                 },
+                simulating = simulating,
+                flightPending = flightPending,
                 showFollow = mapLocation != null,
                 following = following,
                 onFollowingChange = { following = it },
@@ -294,6 +300,8 @@ private fun StatusPanel(
     stats: FlightStats?,
     eta: EtaText?,
     simulator: SimulatorControls?,
+    simulating: Boolean,
+    flightPending: Boolean,
     showFollow: Boolean,
     following: Boolean,
     onFollowingChange: (Boolean) -> Unit,
@@ -322,7 +330,7 @@ private fun StatusPanel(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (plan == null) {
+            if (plan == null && !flightPending) {
                 FilledTonalButton(onClick = onSetUpFlight) { Text(stringResource(R.string.set_up_flight)) }
             }
             if (showFollow) {
@@ -334,7 +342,7 @@ private fun StatusPanel(
             }
         }
         // While simulating, the real GPS is off and its state doesn't matter.
-        if (simulator == null) {
+        if (!simulating) {
             GpsStatus(permission, gps, showFix = plan == null, context = context)
         }
         if (plan != null) {
