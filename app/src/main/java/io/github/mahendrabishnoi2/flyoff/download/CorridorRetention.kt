@@ -2,8 +2,8 @@ package io.github.mahendrabishnoi2.flyoff.download
 
 /**
  * When a downloaded corridor is deleted: [KEEP_AFTER_LANDING_MILLIS] after the flight lands.
- * "Landed" is whatever time the caller has: the planned arrival, or when tracking ended at the
- * destination.
+ * The app knows no schedule, so "landed" is when a tracked position first came near the
+ * destination ([LandingRule]); a flight it never saw land keeps its maps until the user deletes them.
  */
 object CorridorRetention {
 

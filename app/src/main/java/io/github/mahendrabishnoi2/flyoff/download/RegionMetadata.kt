@@ -9,7 +9,7 @@ import java.nio.charset.CodingErrorAction
  * so the storage screen and the clean-up job can tell which flight and chunk a region is.
  *
  * [encode] writes small versioned UTF-8 text: a `flyoff-region 1` header line, then one
- * `key=value` line per field. [decode] reads it back, or returns null for anything it can't
+ * `key=value` line per field (`landedAt` only once it is known). [decode] reads it back, or returns null for anything it can't
  * read with certainty.
  */
 data class RegionMetadata(
@@ -26,8 +26,11 @@ data class RegionMetadata(
     val maxZoom: Int,
     /** When the download was created, in epoch milliseconds. */
     val createdAtMillis: Long,
-    /** The flight's planned landing time, in epoch milliseconds (see [CorridorRetention]). */
-    val plannedLandingMillis: Long,
+    /**
+     * When Flyoff saw the flight land, in epoch milliseconds, or null until then (see
+     * [LandingRule]). The region is deleted [CorridorRetention.KEEP_AFTER_LANDING_MILLIS] later.
+     */
+    val landedAtMillis: Long? = null,
     /** The tile URL template the region was downloaded from, pinned to one OpenFreeMap build. */
     val tileUrlTemplate: String,
 ) {
@@ -47,7 +50,7 @@ data class RegionMetadata(
         for ((key, value) in fields()) append(key).append('=').append(value).append('\n')
     }.toByteArray(Charsets.UTF_8)
 
-    private fun fields(): List<Pair<String, String>> = listOf(
+    private fun fields(): List<Pair<String, String>> = listOfNotNull(
         "origin" to origin,
         "destination" to destination,
         "kind" to kind.name,
@@ -56,7 +59,7 @@ data class RegionMetadata(
         "minZoom" to minZoom.toString(),
         "maxZoom" to maxZoom.toString(),
         "createdAt" to createdAtMillis.toString(),
-        "plannedLanding" to plannedLandingMillis.toString(),
+        landedAtMillis?.let { "landedAt" to it.toString() },
         "tileUrlTemplate" to tileUrlTemplate,
     )
 
@@ -96,7 +99,7 @@ data class RegionMetadata(
                     minZoom = values.getValue("minZoom").toInt(),
                     maxZoom = values.getValue("maxZoom").toInt(),
                     createdAtMillis = values.getValue("createdAt").toLong(),
-                    plannedLandingMillis = values.getValue("plannedLanding").toLong(),
+                    landedAtMillis = values["landedAt"]?.toLong(),
                     tileUrlTemplate = values.getValue("tileUrlTemplate"),
                 )
             } catch (e: NoSuchElementException) {

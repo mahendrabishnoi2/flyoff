@@ -226,4 +226,27 @@ class CorridorStyleTest {
             }
         }
     }
+
+    // ---- Offline region style ----
+
+    @Test
+    fun `the region style has only the corridor source, pinned, with zooms 6 to 9`() {
+        val style = JSONObject(corridorRegionStyle(corridorText, tilesUrl))
+        assertEquals(8, style.getInt("version"))
+        assertEquals(0, style.getJSONArray("layers").length())
+        assertFalse(style.has("glyphs"))
+        assertFalse(style.has("sprite"))
+        val sources = style.getJSONObject("sources")
+        assertEquals(listOf(CORRIDOR_SOURCE), sources.keys().asSequence().toList())
+        val source = sources.getJSONObject(CORRIDOR_SOURCE)
+        assertEquals("vector", source.getString("type"))
+        assertEquals(1, source.getJSONArray("tiles").length())
+        assertEquals(tilesUrl, source.getJSONArray("tiles").getString(0))
+        assertEquals(CORRIDOR_MIN_ZOOM, source.getInt("minzoom"))
+        assertEquals(9, source.getInt("maxzoom"))
+        assertFalse("no TileJSON to fetch", source.has("url"))
+        val attribution = source.getString("attribution")
+        assertEquals(corridor.getJSONObject("sources").getJSONObject(CORRIDOR_SOURCE).getString("attribution"), attribution)
+        for (credit in listOf("OpenFreeMap", "OpenMapTiles", "OpenStreetMap contributors")) assertTrue(credit, credit in attribution)
+    }
 }

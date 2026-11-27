@@ -18,15 +18,23 @@ class RegionMetadataTest {
         minZoom = 6,
         maxZoom = 8,
         createdAtMillis = 1_795_000_000_000L,
-        plannedLandingMillis = 1_795_030_000_000L,
+        landedAtMillis = 1_795_030_000_000L,
         tileUrlTemplate = "https://tiles.openfreemap.org/planet/20261122_124456_pt/{z}/{x}/{y}.pbf",
     )
 
     @Test
     fun `round trip`() {
         assertEquals(metadata, RegionMetadata.decode(metadata.encode()))
-        val detailed = metadata.copy(kind = DownloadKind.DETAILED, chunkIndex = 0, chunkCount = 1, minZoom = 9, maxZoom = 9, plannedLandingMillis = 0L)
+        val detailed = metadata.copy(kind = DownloadKind.DETAILED, chunkIndex = 0, chunkCount = 1, minZoom = 9, maxZoom = 9, landedAtMillis = null)
         assertEquals(detailed, RegionMetadata.decode(detailed.encode()))
+    }
+
+    @Test
+    fun `landing time is optional`() {
+        val notLanded = metadata.copy(landedAtMillis = null)
+        assertTrue("landedAt" !in notLanded.encode().toString(Charsets.UTF_8))
+        assertEquals(notLanded, RegionMetadata.decode(notLanded.encode()))
+        assertNull(RegionMetadata.decode(notLanded.encode() + "landedAt=soon\n".toByteArray()))
     }
 
     @Test
@@ -56,8 +64,9 @@ class RegionMetadataTest {
     @Test
     fun `damaged metadata decodes to null`() {
         val lines = metadata.encode().toString(Charsets.UTF_8).trimEnd('\n').split('\n')
-        // Any one line missing.
+        // Any one line missing, except the optional landing time.
         for (i in lines.indices) {
+            if (lines[i].startsWith("landedAt=")) continue
             val text = lines.filterIndexed { j, _ -> j != i }.joinToString("\n", postfix = "\n")
             assertNull("without line $i", RegionMetadata.decode(text.toByteArray()))
         }

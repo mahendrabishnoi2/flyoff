@@ -120,3 +120,29 @@ private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { get
 private fun tileLongitude(x: Int, z: Int): Double = x.toDouble() / (1 shl z) * 360.0 - 180.0
 
 private fun tileLatitude(y: Int, z: Int): Double = Math.toDegrees(atan(sinh(PI * (1 - 2.0 * y / (1 shl z)))))
+
+/** The highest zoom any corridor download fetches (the detailed map's strip). */
+const val CORRIDOR_MAX_ZOOM = 9
+
+/**
+ * The style an offline region is created with, from [corridor] (corridor.json): only its
+ * [CORRIDOR_SOURCE] vector source, with [tilesUrl] (the pinned template), zooms
+ * [CORRIDOR_MIN_ZOOM] to [CORRIDOR_MAX_ZOOM] and corridor.json's attribution. No layers, glyphs
+ * or sprite: MapLibre's offline downloader fetches every source's tiles whatever the layers, so
+ * a region downloads the style and its tiles and nothing else.
+ */
+fun corridorRegionStyle(corridor: String, tilesUrl: String): String {
+    val source = JSONObject(corridor).getJSONObject("sources").getJSONObject(CORRIDOR_SOURCE)
+    val only = JSONObject()
+        .put("type", "vector")
+        .put("tiles", JSONArray().put(tilesUrl))
+        .put("minzoom", CORRIDOR_MIN_ZOOM)
+        .put("maxzoom", CORRIDOR_MAX_ZOOM)
+        .put("attribution", source.getString("attribution"))
+    return JSONObject()
+        .put("version", 8)
+        .put("name", "Flyoff corridor download")
+        .put("sources", JSONObject().put(CORRIDOR_SOURCE, only))
+        .put("layers", JSONArray())
+        .toString()
+}
