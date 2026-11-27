@@ -21,13 +21,20 @@ class TrackDecimatorTest {
 
     @Test
     fun `keeps one point per interval, measured from the last kept point`() {
-        // 3,000 is too soon after 0; 6,000 is 6 s after 0; 9,000 is only 3 s after 6,000.
-        assertEquals(listOf(0L, 6_000L, 11_000L), kept(TrackDecimator(), 0, 3_000, 4_999, 6_000, 9_000, 10_999, 11_000))
+        // 3,000 and 4,499 are too soon after 0; 6,000 is 6 s after 0; 9,000 and 10,499 are under 4.5 s after 6,000.
+        assertEquals(listOf(0L, 6_000L, 10_500L), kept(TrackDecimator(), 0, 3_000, 4_499, 6_000, 9_000, 10_499, 10_500))
     }
 
     @Test
-    fun `exactly the interval is kept and a repeated time is not`() {
-        assertEquals(listOf(0L, 5_000L, 10_000L), kept(TrackDecimator(), 0, 0, 5_000, 5_000, 9_999, 10_000))
+    fun `90 percent of the interval is kept and a repeated time is not`() {
+        assertEquals(listOf(0L, 4_500L, 9_000L), kept(TrackDecimator(), 0, 0, 4_500, 4_500, 8_999, 9_000))
+    }
+
+    @Test
+    fun `fixes every 5 seconds that arrive up to 10 percent early are all kept`() {
+        // The screen-off request is every 5 s, and Android may deliver each fix up to 0.5 s early.
+        val offsets = longArrayOf(0, 4_600, 9_100, 14_000, 18_500, 23_400)
+        assertEquals(offsets.toList(), kept(TrackDecimator(), *offsets))
     }
 
     @Test
@@ -40,7 +47,7 @@ class TrackDecimatorTest {
     @Test
     fun `time going backwards restarts from that point`() {
         // 2,000 went back (a clock change or a new run): kept, and the interval restarts from it.
-        assertEquals(listOf(0L, 5_000L, 2_000L, 7_000L), kept(TrackDecimator(), 0, 5_000, 2_000, 4_000, 6_999, 7_000))
+        assertEquals(listOf(0L, 5_000L, 2_000L, 7_000L), kept(TrackDecimator(), 0, 5_000, 2_000, 4_000, 6_499, 7_000))
         // A jump far into the past works the same way.
         assertEquals(listOf(0L, -3_600_000L, -3_595_000L), kept(TrackDecimator(), 0, -3_600_000, -3_599_000, -3_595_000))
     }
@@ -55,12 +62,12 @@ class TrackDecimatorTest {
 
     @Test
     fun `a custom interval`() {
-        assertEquals(listOf(0L, 1_000L, 2_500L), kept(TrackDecimator(minIntervalMillis = 1_000), 0, 500, 1_000, 1_999, 2_500))
-        assertEquals(listOf(0L, 0L, 1L), kept(TrackDecimator(minIntervalMillis = 0), 0, 0, 1))
+        assertEquals(listOf(0L, 900L, 2_500L), kept(TrackDecimator(intervalMillis = 1_000), 0, 500, 899, 900, 1_799, 2_500))
+        assertEquals(listOf(0L, 0L, 1L), kept(TrackDecimator(intervalMillis = 0), 0, 0, 1))
     }
 
     @Test
     fun `rejects a negative interval`() {
-        assertThrows(IllegalArgumentException::class.java) { TrackDecimator(minIntervalMillis = -1) }
+        assertThrows(IllegalArgumentException::class.java) { TrackDecimator(intervalMillis = -1) }
     }
 }

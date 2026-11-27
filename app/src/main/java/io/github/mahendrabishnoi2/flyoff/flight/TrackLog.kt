@@ -71,19 +71,29 @@ object TrackLog {
     private class Optional(val value: Double?)
 }
 
-/** Keeps a track small: one point per [minIntervalMillis]. 5 s gives about 7,200 points (~0.4 MB) for a 10-hour flight. */
-class TrackDecimator(private val minIntervalMillis: Long = 5_000) {
+/**
+ * Keeps a track small: one point per [intervalMillis]. 5 s gives about 7,200 points (~0.4 MB) for
+ * a 10-hour flight.
+ *
+ * A point is kept once 90 % of the interval has passed since the last kept one. Android delivers
+ * fixes up to 10 % early (LocationProviderManager allows the request's minimum update interval
+ * minus 10 % jitter), so with the 5 s request the tracking service makes while the screen is off,
+ * a fix 4.6 s after the last one is the next fix, not an extra.
+ */
+class TrackDecimator(private val intervalMillis: Long = 5_000) {
 
     init {
-        require(minIntervalMillis >= 0) { "minIntervalMillis $minIntervalMillis must not be negative" }
+        require(intervalMillis >= 0) { "intervalMillis $intervalMillis must not be negative" }
     }
+
+    private val minGapMillis = intervalMillis - intervalMillis / 10
 
     private var lastKeptMillis: Long? = null
 
-    /** True if [point] should be kept: the first point, one at least minIntervalMillis after the last kept point, or one whose time went backwards (then it restarts from it). */
+    /** True if [point] should be kept: the first point, one at least 90 % of the interval after the last kept point, or one whose time went backwards (then it restarts from it). */
     fun accept(point: TrackPoint): Boolean {
         val last = lastKeptMillis
-        val keep = last == null || point.timeMillis < last || point.timeMillis - last >= minIntervalMillis
+        val keep = last == null || point.timeMillis < last || point.timeMillis - last >= minGapMillis
         if (keep) lastKeptMillis = point.timeMillis
         return keep
     }
