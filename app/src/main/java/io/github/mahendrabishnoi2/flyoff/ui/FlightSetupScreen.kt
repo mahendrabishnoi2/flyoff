@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -55,14 +56,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mahendrabishnoi2.flyoff.R
 import io.github.mahendrabishnoi2.flyoff.airports.Airport
 import io.github.mahendrabishnoi2.flyoff.airports.AirportSearch
+import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
 import io.github.mahendrabishnoi2.flyoff.flight.Endpoint
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.FlightDraft
 import io.github.mahendrabishnoi2.flyoff.routes.FlightLookup
 import io.github.mahendrabishnoi2.flyoff.routes.RouteLeg
+import io.github.mahendrabishnoi2.flyoff.routes.RouteUpdates
 import java.util.IllformedLocaleException
 import java.util.Locale
 
@@ -98,6 +102,9 @@ fun FlightSetupScreen(
     var rejected by rememberSaveable { mutableStateOf<String?>(null) }
     var flightNumber by rememberSaveable { mutableStateOf("") }
     val routes = rememberRoutes()
+    val context = LocalContext.current
+    val updateState by RouteUpdates.state.collectAsStateWithLifecycle()
+    val routeMaps by RouteMaps.state.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
     val searchFocus = remember { FocusRequester() }
 
@@ -187,6 +194,14 @@ fun FlightSetupScreen(
                 lookup = lookup,
                 chosen = draft.toCodes(),
                 onUse = ::useLeg,
+                update = FlightDataUpdate(
+                    state = updateState,
+                    dateSeconds = (routes as? RoutesState.Ready)?.data?.dateSeconds,
+                    mobileDataAllowed = routeMaps.mobileDataAllowed,
+                    onCheck = { RouteUpdates.check(context) },
+                    onDownload = { RouteUpdates.download(context) },
+                    onDismiss = RouteUpdates::dismiss,
+                ),
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
             )
             Row(

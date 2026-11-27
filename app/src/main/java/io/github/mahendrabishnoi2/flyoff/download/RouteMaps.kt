@@ -148,6 +148,15 @@ object RouteMaps {
         mutableState.update { it.copy(mobileDataAllowed = allowed) }
     }
 
+    /**
+     * Flyoff's one HTTP client ([OpenFreeMap.client]: its User-Agent and request limit), also
+     * for the flight data update. Call it on the main thread, like [init].
+     */
+    fun httpClient(context: Context): OkHttpClient {
+        init(context)
+        return requireNotNull(client)
+    }
+
     /** The map reports whether its style shows the downloaded corridor (whose tiles MapLibre could fetch). */
     fun setCorridorShown(shown: Boolean) {
         corridorShown.value = shown
