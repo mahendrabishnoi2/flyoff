@@ -94,7 +94,7 @@ object Tracker {
     /** Reads the recorded track of [codes] from the file, unless it is loaded or being recorded. */
     suspend fun loadTrack(context: Context, codes: FlightCodes) {
         if (state.value.trackCodes == codes) return
-        val points = withContext(Dispatchers.IO) { TrackFile(trackFile(context)).read(codes) }
+        val points = withContext(Dispatchers.IO) { TrackFile(trackFile(context)).read(codes, System.currentTimeMillis()) }
         mutableState.update { if (it.active) it else it.copy(trackCodes = codes, track = points) }
     }
 

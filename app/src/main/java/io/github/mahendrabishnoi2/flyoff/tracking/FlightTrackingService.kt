@@ -55,7 +55,8 @@ import java.io.IOException
  * doesn't end the track.
  *
  * `START_NOT_STICKY`: if Android kills the process, a restart from the background couldn't
- * legally get location anyway. The UI then sees tracking off, and Start continues the same file.
+ * legally get location anyway. The UI then sees tracking off, and Start continues the same file
+ * (unless its newest point is over 12 hours old: see [TrackFile]).
  */
 class FlightTrackingService : Service() {
 
@@ -168,7 +169,7 @@ class FlightTrackingService : Service() {
                 // Load (or start) the file before the first fix, so no point is lost or doubled.
                 val points = withContext(io) {
                     try {
-                        trackFile.open(requested.codes)
+                        trackFile.open(requested.codes, System.currentTimeMillis())
                     } catch (_: IOException) {
                         emptyList()
                     }
