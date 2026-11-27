@@ -30,7 +30,7 @@ CI's emulator smoke test sets up LHR→JFK, runs the simulator and checks that t
    - **Stop** removes the badge and the strip, and the panel goes back to real GPS.
 5. **Rotation and restart while simulating.** Start a replay at **10×**. Rotate the phone, then rotate back.
    - The replay carries on from where it was (it doesn't restart or stop), and the badge stays.
-   - In landscape the panel sits on the left and the map is visible beside it. The badge, the MapLibre logo and the (i) attribution button are on the map to the right of the panel, nothing covers them, and the (i) button opens the attribution.
+   - In landscape the panel sits on the left and the map is visible beside it. **Follow me** is fully visible above the flight card; if the card doesn't fit, the card scrolls, not the button. The badge, the MapLibre logo and the (i) attribution button are on the map to the right of the panel, nothing covers them, and the (i) button opens the attribution.
    - Press Home, wait 30 seconds, and come back: the dot has moved on by about 5 minutes of flight.
 6. **Process death.** With a flight set, enable **Developer options → Don't keep activities** (or run `adb shell am kill io.github.mahendrabishnoi2.flyoff` while the app is in the background). Leave and return to the app.
    - The flight is still set and the route drawn. A replay that was running is still running, with the badge, and "Set up flight" doesn't flash up while the app starts.

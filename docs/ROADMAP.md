@@ -19,7 +19,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 |---|---|---|
 | 0 | Research and validation | ✅ Done |
 | 1 | Map and GPS dot | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m1-phone-test.md) pending |
-| 2 | Flight setup and stats | 🚧 In progress |
+| 2 | Flight setup and stats | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m2-phone-test.md) pending |
 | 3 | Reliable tracking | Planned |
 | 4 | Route map download | Planned |
 | 5 | Flight-number suggestion | Planned |
