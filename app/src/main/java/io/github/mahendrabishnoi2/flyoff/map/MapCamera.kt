@@ -15,6 +15,9 @@ const val MIN_ZOOM = 0.0
  */
 const val MAX_ZOOM = 8.0
 
+/** With a detailed corridor (zoom-9 tiles) downloaded, the user may zoom one level further. */
+const val MAX_CORRIDOR_ZOOM = 9.0
+
 /** The camera on a cold start: the whole world, centred a little north of the equator where most land is. */
 const val START_LATITUDE = 20.0
 const val START_LONGITUDE = 0.0

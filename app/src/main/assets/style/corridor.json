@@ -1,0 +1,266 @@
+{
+  "version": 8,
+  "name": "Flyoff Corridor",
+  "metadata": {
+    "flyoff:about": "Extra detail for zoom 6-9 along a downloaded route corridor (Milestone 4), drawn over flyoff.json's world map. Not a style on its own: the app merges it into flyoff.json.",
+    "flyoff:anchor": "label-water",
+    "flyoff:merge": "Add both sources. Layers whose flyoff:slot is below-anchor go directly below the anchor layer (flyoff.json's lowest label layer), in file order; layers whose slot is above-anchor go directly above it, in file order. So: world fills and lines, the corridor mask, corridor fills and lines, then (added by the app) the route and track lines, then world and corridor labels.",
+    "flyoff:corridor": "Set tiles to the exact URL template the corridor was downloaded with and maxzoom to the highest zoom downloaded (8, or 9 for the detailed download). Only downloaded tiles exist (MapLibre runs disconnected). Where a tile was not downloaded but its parent was, MapLibre Native draws the parent.",
+    "flyoff:mask": "corridor-mask holds the land-coloured cover that hides the world map where corridor tiles are drawn: the union of the downloaded tiles at the corridor's minzoom (6), which also covers every higher-zoom tile and the parents drawn in their place. Empty when nothing is downloaded."
+  },
+  "sources": {
+    "corridor": {
+      "type": "vector",
+      "tiles": ["https://tiles.openfreemap.org/planet/20261122_124456_pt/{z}/{x}/{y}.pbf"],
+      "minzoom": 6,
+      "maxzoom": 8,
+      "attribution": "<a href=\"https://openfreemap.org\">OpenFreeMap</a> <a href=\"https://www.openmaptiles.org/\">© OpenMapTiles</a> <a href=\"https://www.openstreetmap.org/copyright\">© OpenStreetMap contributors</a>"
+    },
+    "corridor-mask": {
+      "type": "geojson",
+      "data": {"type": "FeatureCollection", "features": []}
+    }
+  },
+  "layers": [
+    {
+      "id": "corridor-mask",
+      "type": "fill",
+      "source": "corridor-mask",
+      "minzoom": 6,
+      "metadata": {
+        "flyoff:slot": "below-anchor",
+        "flyoff:about": "The land colour (flyoff.json's background) over the world map's fills and lines. No antialiasing, so the rectangles it is made of leave no seams."
+      },
+      "paint": {"fill-color": "#f3f0e8", "fill-antialias": false}
+    },
+    {
+      "id": "corridor-residential",
+      "type": "fill",
+      "source": "corridor",
+      "source-layer": "landuse",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "residential"],
+      "paint": {"fill-color": "#e8e2d8"}
+    },
+    {
+      "id": "corridor-wood",
+      "type": "fill",
+      "source": "corridor",
+      "source-layer": "landcover",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "wood"],
+      "paint": {"fill-color": "#e4e9d4"}
+    },
+    {
+      "id": "corridor-national-park",
+      "type": "fill",
+      "source": "corridor",
+      "source-layer": "park",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "national_park"],
+      "paint": {"fill-color": "#cfe0bd", "fill-opacity": 0.35}
+    },
+    {
+      "id": "corridor-ice",
+      "type": "fill",
+      "source": "corridor",
+      "source-layer": "landcover",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "ice"],
+      "paint": {"fill-color": "#fbfdff", "fill-opacity": 0.9}
+    },
+    {
+      "id": "corridor-water",
+      "type": "fill",
+      "source": "corridor",
+      "source-layer": "water",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["!=", ["get", "brunnel"], "tunnel"],
+      "paint": {"fill-color": "#a9cbe3"}
+    },
+    {
+      "id": "corridor-river",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "waterway",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["all", ["==", ["get", "class"], "river"], ["!=", ["get", "brunnel"], "tunnel"]],
+      "layout": {"line-join": "round", "line-cap": "round"},
+      "paint": {
+        "line-color": "#a9cbe3",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 9, 1.6]
+      }
+    },
+    {
+      "id": "corridor-road-primary",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "transportation",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "primary"],
+      "layout": {"line-join": "round", "line-cap": "round"},
+      "paint": {
+        "line-color": "#ddd1bd",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.5, 9, 1.2]
+      }
+    },
+    {
+      "id": "corridor-road-trunk",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "transportation",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "trunk"],
+      "layout": {"line-join": "round", "line-cap": "round"},
+      "paint": {
+        "line-color": "#e9c9a0",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.6, 9, 1.5]
+      }
+    },
+    {
+      "id": "corridor-road-motorway",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "transportation",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["==", ["get", "class"], "motorway"],
+      "layout": {"line-join": "round", "line-cap": "round"},
+      "paint": {
+        "line-color": "#e2b07c",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.8, 9, 2]
+      }
+    },
+    {
+      "id": "corridor-boundary-state",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "boundary",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["all",
+        ["==", ["get", "admin_level"], 4],
+        ["!=", ["get", "maritime"], 1]
+      ],
+      "layout": {"line-join": "round"},
+      "paint": {
+        "line-color": "#b9aec4",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.8, 9, 1.1],
+        "line-dasharray": [3, 2]
+      }
+    },
+    {
+      "id": "corridor-boundary-country-disputed",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "boundary",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["all",
+        ["==", ["get", "admin_level"], 2],
+        ["!=", ["get", "maritime"], 1],
+        ["==", ["get", "disputed"], 1]
+      ],
+      "layout": {"line-join": "round"},
+      "paint": {
+        "line-color": "#8c7a99",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.4, 9, 1.8],
+        "line-dasharray": [2, 2]
+      }
+    },
+    {
+      "id": "corridor-boundary-country",
+      "type": "line",
+      "source": "corridor",
+      "source-layer": "boundary",
+      "metadata": {"flyoff:slot": "below-anchor"},
+      "filter": ["all",
+        ["==", ["get", "admin_level"], 2],
+        ["!=", ["get", "maritime"], 1],
+        ["!=", ["get", "disputed"], 1]
+      ],
+      "layout": {"line-join": "round", "line-cap": "round"},
+      "paint": {
+        "line-color": "#8c7a99",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.4, 9, 1.8]
+      }
+    },
+    {
+      "id": "corridor-label-lake",
+      "type": "symbol",
+      "source": "corridor",
+      "source-layer": "water_name",
+      "minzoom": 7,
+      "metadata": {"flyoff:slot": "above-anchor"},
+      "filter": ["==", ["get", "class"], "lake"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Italic"],
+        "text-size": 10,
+        "text-max-width": 6
+      },
+      "paint": {
+        "text-color": "#4b7da3",
+        "text-halo-color": "rgba(255, 255, 255, 0.7)",
+        "text-halo-width": 1
+      }
+    },
+    {
+      "id": "corridor-label-place",
+      "type": "symbol",
+      "source": "corridor",
+      "source-layer": "place",
+      "metadata": {
+        "flyoff:slot": "above-anchor",
+        "flyoff:about": "Towns, villages and the cities flyoff.json leaves out (it shows capitals and cities up to rank 6 from zoom 6), so no place is labelled twice. Lower ranks first; more of them as the zoom grows. Below the world labels, so the big cities keep their place."
+      },
+      "filter": ["all",
+        ["match", ["get", "class"], ["city", "town", "village"], true, false],
+        ["!=", ["get", "capital"], 2],
+        ["!", ["all", ["==", ["get", "class"], "city"], ["<=", ["coalesce", ["get", "rank"], 99], 6]]],
+        ["<=", ["coalesce", ["get", "rank"], 99],
+          ["match", ["get", "class"],
+            "city", ["step", ["zoom"], 10, 7, 99],
+            "town", ["step", ["zoom"], 8, 7, 12, 8, 99],
+            ["step", ["zoom"], -1, 9, 99]
+          ]
+        ]
+      ],
+      "layout": {
+        "symbol-sort-key": ["+",
+          ["coalesce", ["get", "rank"], 99],
+          ["match", ["get", "class"], "city", 0, "town", 100, 200]
+        ],
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["match", ["get", "class"], "city", 12, "town", 11, 10],
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": ["match", ["get", "class"], "city", "#444444", "town", "#555555", "#666666"],
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "corridor-airport-label",
+      "type": "symbol",
+      "source": "corridor",
+      "source-layer": "aerodrome_label",
+      "metadata": {
+        "flyoff:slot": "above-anchor",
+        "flyoff:about": "IATA codes of international airports (zoom 8 and up in the tiles), placed like the app's own origin and destination labels (RouteLayers.kt), so those hide the corridor's copy. No dot: a circle layer takes no part in label collisions, so it would stay when its label is hidden."
+      },
+      "filter": ["all", ["==", ["get", "class"], "international"], ["has", "iata"]],
+      "layout": {
+        "text-field": ["get", "iata"],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": 11,
+        "text-anchor": "top",
+        "text-offset": [0, 0.5]
+      },
+      "paint": {
+        "text-color": "#6f6478",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    }
+  ]
+}

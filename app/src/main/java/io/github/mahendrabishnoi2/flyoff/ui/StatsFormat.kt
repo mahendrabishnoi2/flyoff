@@ -106,3 +106,20 @@ fun formatEtaOrUtc(etaMillis: Long?, nowMillis: Long, zoneId: String, locale: Lo
         EtaText(formatEta(etaMillis, nowMillis, "UTC", locale), inUtc = true)
     }
 }
+
+/**
+ * "34 MB": an estimate's upper bound, rounded up to whole megabytes (1,000,000 bytes, as
+ * OpenFreeMap's 50 MB limit counts them), at least 1.
+ */
+fun formatUpToMegabytes(bytes: Long, locale: Locale): String {
+    val mb = ((bytes.coerceAtLeast(0) + 999_999) / 1_000_000).coerceAtLeast(1)
+    return "${NumberFormat.getIntegerInstance(locale).format(mb)} MB"
+}
+
+/** "12.3 MB": a stored size, with one decimal. */
+fun formatMegabytes(bytes: Long, locale: Locale): String {
+    val format = NumberFormat.getNumberInstance(locale)
+    format.minimumFractionDigits = 1
+    format.maximumFractionDigits = 1
+    return "${format.format(bytes.coerceAtLeast(0) / 1_000_000.0)} MB"
+}

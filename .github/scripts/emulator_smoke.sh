@@ -7,17 +7,28 @@
 # notification, recording with the screen off, the estimated position (and its
 # grey dot) during a GPS drop-out and recording again after it, tracking in the
 # background, Resume after Android kills the app, Stop, simulated GPS gaps and
-# the Battery Saver warning. Last, set up a flight across the antimeridian, and
-# simulate without location permission.
+# the Battery Saver warning. Then set up a flight across the antimeridian, and
+# simulate without location permission. Last, the Milestone 4 checks: download
+# the route map of FLYOFF_ROUTE (default LHR-CDG, short to stay polite to
+# OpenFreeMap) and check its tile and byte counts, that the map shows it, that
+# moving the map outside it uses no network, and that it still shows in
+# airplane mode after a restart.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
-# Usage: emulator_smoke.sh <debug-apk> <out-dir>
+# Usage: [FLYOFF_ROUTE=LHR-JFK] emulator_smoke.sh <debug-apk> <out-dir>
 set -euo pipefail
 
 APK="$1"
 OUT="$2"
 PKG="io.github.mahendrabishnoi2.flyoff"
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+AIRPORTS="$SCRIPTS/../../app/src/main/assets/airports/airports.tsv"
+ROUTE="${FLYOFF_ROUTE:-LHR-CDG}"
+[[ "$ROUTE" =~ ^[A-Z]{3}-[A-Z]{3}$ ]] || { echo "FAIL: FLYOFF_ROUTE '$ROUTE' isn't like LHR-CDG" >&2; exit 1; }
+ROUTE_FROM="${ROUTE%-*}"
+ROUTE_TO="${ROUTE#*-}"
+# The flight card's route map download button, shown once the download is planned.
+DOWNLOAD_BUTTON="^Download route map \(up to [0-9]+ MB\)$|^Part [0-9]+ of [0-9]+ · up to [0-9]+ MB$"
 mkdir -p "$OUT"
 
 fail() { echo "FAIL: $*" >&2; adb logcat -d > "$OUT/logcat.txt" || true; exit 1; }
@@ -54,7 +65,7 @@ rec_stop() {
   find "$OUT/video" -name '*.mp4' -size -2k -delete 2> /dev/null || true
   echo "screen recording: $(ls "$OUT/video" 2> /dev/null | wc -l) segment(s) in video/"
 }
-trap rec_stop EXIT
+trap 'rec_stop; [ -z "${FLYOFF_LOG_PID:-}" ] || kill "$FLYOFF_LOG_PID" 2> /dev/null || true' EXIT
 
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; echo "screenshot $1: $(python3 -I "$SCRIPTS/png_colours.py" "$OUT/$1.png") colours"; }
 
@@ -333,6 +344,9 @@ wait_for 06-route "^Simulate flight$" 10
 expect 06-route "LHR → JFK|^Flight from London Heathrow"
 expect 06-route "^[0-9,]+ km route$"
 no_crash "flight setup"
+# The route map's size and button make the panel taller once worked out (a few
+# seconds on a long route), and the camera fits the route again.
+wait_for 06-route-plan "$DOWNLOAD_BUTTON" 60
 sleep 3 # the camera's fit animation
 shot 06-route
 python3 -I "$SCRIPTS/png_colours.py" "$OUT/06-route.png" 40 > /dev/null
@@ -605,6 +619,7 @@ wait_for 11-picked "^To: LAX " 10
 tap 11-picked "^Done$"
 wait_for 11-antimeridian "SYD → LAX|^Flight from Sydney" 10
 no_crash "antimeridian"
+wait_for 11-antimeridian-plan "$DOWNLOAD_BUTTON" 60
 sleep 3
 shot 11-antimeridian
 python3 -I "$SCRIPTS/png_colours.py" "$OUT/11-antimeridian.png" 40 > /dev/null
@@ -631,6 +646,201 @@ expect 12-sim-paused "^Simulated position"
 tap 12-sim-paused "^Stop$"
 wait_for 12-sim-stopped "^Simulate flight$" 10
 no_crash "simulator without permission"
+
+echo "== Route map: $ROUTE_FROM to $ROUTE_TO"
+adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant "$PKG" android.permission.ACCESS_COARSE_LOCATION
+# Keep the location dot off the origin airport, where the zoom taps go.
+adb emu geo fix 10.0 45.0 10000 8 450
+# Flyoff's own log lines, for the whole download (logcat's ring buffer may not keep them).
+adb logcat -v threadtime -s Flyoff:I > "$OUT/flyoff-log.txt" 2> /dev/null &
+FLYOFF_LOG_PID=$!
+# Back to the foreground with location allowed.
+adb shell input keyevent KEYCODE_HOME
+sleep 2
+adb shell am start -W -n "$PKG/.MainActivity"
+wait_for 21-restarted "^Change$" 20
+tap 21-restarted "^Change$"
+wait_for 21-change "^From: " 10
+tap 21-change "^From: "
+sleep 1
+pick_airport 21-pick-origin "$ROUTE_FROM"
+wait_for 21-origin-picked "^From: $ROUTE_FROM " 10
+tap 21-origin-picked "^To: "
+sleep 1
+pick_airport 21-pick-destination "$ROUTE_TO"
+wait_for 21-picked "^To: $ROUTE_TO " 10
+tap 21-picked "^Done$"
+wait_for 21-route "$DOWNLOAD_BUTTON" 60
+reject 21-route "^Ready for offline"
+expect 21-route "Wi-Fi"
+no_crash "route map planned"
+
+# The y of the panel's top: corridor pixels are counted above it, on the map.
+panel_top() { python3 -I "$SCRIPTS/ui_find.py" top "$OUT/$1.xml" "$ROUTE_FROM → $ROUTE_TO|^Flight from" || fail "no flight header ($1)"; }
+
+# Double-tap the origin end of the fitted route until MapLibre stops at the
+# highest zoom (8), with the origin airport staying under the finger. Screenshot $1.
+zoom_to_origin() {
+  local name="$1" xy i
+  sleep 3 # the camera's fit animation
+  ui "$name-fit"
+  shot "$name-fit"
+  xy=$(python3 -I "$SCRIPTS/route_end.py" "$OUT/$name-fit.png" "$ROUTE_FROM" "$ROUTE_TO" "$AIRPORTS" "$(panel_top "$name-fit")") ||
+    fail "no route to zoom into ($name-fit.png)"
+  echo "origin end of the route at $xy"
+  for i in 1 2 3 4 5 6 7 8 9; do
+    # Both taps in one shell, 40 to 300 ms apart for Android's double tap: `input`
+    # goes through `cmd input` and can take less than 40 ms (CI run 45989915871).
+    adb shell "input tap $xy; sleep 0.12; input tap $xy"
+    sleep 1.5
+  done
+  sleep 4 # tiles and labels
+  shot "$name"
+}
+
+# Pixels in the corridor style's own colours in screenshot $1, above y $2.
+corridor_pixels() { python3 -I "$SCRIPTS/corridor_pixels.py" "$OUT/$1.png" "$2"; }
+
+zoom_to_origin 21-before-z8
+ui 21-before-z8
+top=$(panel_top 21-before-z8)
+before_px=$(corridor_pixels 21-before-z8 "$top")
+echo "corridor pixels near $ROUTE_FROM at zoom 8 before the download: $before_px (above y $top)"
+
+# A dump that may fail while the progress bar moves; the caller tries again.
+try_ui() {
+  adb shell rm -f /sdcard/ui.xml
+  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
+  adb shell cat /sdcard/ui.xml > "$OUT/$1.xml" 2> /dev/null && grep -q "<hierarchy" "$OUT/$1.xml"
+}
+
+echo "== Download the route map"
+mobile_allowed=false
+taps=0
+dl_start=$SECONDS
+while true; do
+  if ((SECONDS - dl_start >= 900)); then fail "the route map wasn't ready after 900 s ($taps download taps, 22-download.xml)"; fi
+  if ! try_ui 22-download; then sleep 2; continue; fi
+  if has 22-download "^Ready for offline"; then break; fi
+  if has 22-download "^Not on Wi-Fi"; then
+    # The emulator's network may be mobile data: allow it for route maps once.
+    [ "$mobile_allowed" = false ] || fail "still 'Not on Wi-Fi' with mobile data allowed (22-download)"
+    mobile_allowed=true
+    echo "no Wi-Fi: allowing mobile data for route maps in Stored maps"
+    tap 22-download "^Stored maps$"
+    wait_for 22-stored-settings "^Use mobile data for route maps$" 10
+    tap 22-stored-settings "^Use mobile data for route maps$"
+    sleep 1
+    shot 22-mobile-data
+    adb shell input keyevent KEYCODE_BACK
+    sleep 2
+    continue
+  fi
+  if has 22-download "^Couldn.t reach OpenFreeMap|more than OpenFreeMap allows|no longer serves|couldn.t be stored|planned by another version"; then
+    shot 22-download-problem
+    fail "the download stopped with a problem (22-download.xml, 22-download-problem.png)"
+  fi
+  if has 22-download "$DOWNLOAD_BUTTON" && ! has 22-download "^Cancel$"; then
+    taps=$((taps + 1))
+    [ "$taps" -le 20 ] || fail "more than 20 download taps"
+    echo "tap $taps: $(python3 -I "$SCRIPTS/ui_find.py" number "$OUT/22-download.xml" "^Part ([0-9]+) of" 2> /dev/null || echo 1)"
+    [ "$taps" = 1 ] && shot 22-before-tap
+    tap_xy "$(find_xy 22-download "$DOWNLOAD_BUTTON")"
+    sleep 3
+    [ "$taps" = 1 ] && shot 22-downloading
+    continue
+  fi
+  sleep 3
+done
+echo "route map ready after $((SECONDS - dl_start)) s and $taps download tap(s)"
+no_crash "route map download"
+shot 22-ready
+sleep 2
+kill "$FLYOFF_LOG_PID" 2> /dev/null || true
+wait "$FLYOFF_LOG_PID" 2> /dev/null || true
+python3 -I "$SCRIPTS/download_log.py" "$OUT/flyoff-log.txt" || fail "the download log shows a problem (flyoff-log.txt)"
+done_lines=$(grep -c " download-done " "$OUT/flyoff-log.txt" || true)
+[ "$done_lines" = "$taps" ] || fail "$taps download taps but $done_lines finished downloads (flyoff-log.txt)"
+
+zoom_to_origin 22-ready-z8
+ui 22-ready-z8
+expect 22-ready-z8 "^Ready for offline"
+top=$(panel_top 22-ready-z8)
+ready_px=$(corridor_pixels 22-ready-z8 "$top")
+echo "corridor pixels near $ROUTE_FROM at zoom 8 with the route map: $ready_px (before: $before_px)"
+[ "$ready_px" -ge $((before_px + 1000)) ] || fail "the map doesn't show the downloaded corridor ($before_px pixels before, $ready_px after; 22-ready-z8.png)"
+
+echo "== No network outside the downloaded map"
+uid=$(adb shell cmd package list packages -U "$PKG" | tr -d '\r' | sed -n 's/^package:'"$PKG"' uid:\([0-9]*\).*/\1/p' | head -1)
+[ -n "$uid" ] || fail "no uid for $PKG"
+netstats() {
+  adb shell dumpsys netstats --poll > /dev/null
+  adb shell dumpsys netstats --uid > "$OUT/$1.txt"
+  python3 -I "$SCRIPTS/netstats_uid.py" "$OUT/$1.txt" "$uid"
+}
+net_before=$(netstats dumpsys-23-netstats-before)
+echo "app uid $uid: $net_before bytes so far (the download)"
+# Inside a downloaded zoom-6 square, outside the zoom-8 strip, where MapLibre
+# must draw the zoom-7 tiles: north of LHR. Follow me keeps zoom 8 and moves there.
+if [ "$ROUTE_FROM" = LHR ]; then
+  adb emu geo fix -1.0 54.2 10000 8 450
+  sleep 2
+  wait_for 23-edge-follow "^Follow me$" 15
+  [ "$(follow_me 23-edge-follow)" = "true" ] || tap 23-edge-follow "^Follow me$"
+  sleep 5
+  ui 23-edge-z8
+  top=$(panel_top 23-edge-z8)
+  shot 23-edge-z8
+  edge_px=$(corridor_pixels 23-edge-z8 "$top")
+  echo "corridor pixels at the strip's edge (54.2, -1.0) at zoom 8: $edge_px"
+  [ "$edge_px" -ge 500 ] || echo "WARNING: MapLibre may not draw the zoom-7 tiles past the zoom-8 strip ($edge_px pixels, 23-edge-z8.png)"
+fi
+# Pan about outside the downloaded map, slowly (no fling), with the network on.
+y=$(( $(panel_top 22-ready-z8) / 2 ))
+for dx in 700 700 -700 -700 -700; do
+  adb shell input swipe $((540 - dx / 2)) "$y" $((540 + dx / 2)) "$y" 1500
+  sleep 2
+done
+adb shell input swipe 540 "$y" 540 $((y + 250)) 1000
+sleep 6
+shot 23-panned
+net_after=$(netstats dumpsys-23-netstats-after)
+echo "app uid $uid: $net_before bytes before panning, $net_after after ($((net_after - net_before)) bytes while panning)"
+if [ "$net_before" = 0 ]; then
+  echo "WARNING: netstats shows no bytes for uid $uid even after the download; the netstats check proves nothing"
+elif [ $((net_after - net_before)) -gt 10000 ]; then
+  fail "the app used $((net_after - net_before)) bytes of network while the map moved outside the download"
+fi
+ui 23-panned
+[ "$(follow_me 23-panned)" = "false" ] || tap 23-panned "^Follow me$"
+no_crash "panning"
+
+echo "== Route map in airplane mode after a restart"
+adb shell cmd connectivity airplane-mode enable
+sleep 3
+[ "$(adb shell settings get global airplane_mode_on | tr -d '\r')" = 1 ] || fail "airplane mode didn't turn on"
+adb shell am force-stop "$PKG"
+adb shell am start -W -n "$PKG/.MainActivity"
+wait_for 24-offline "^Ready for offline" 30
+no_crash "airplane mode restart"
+zoom_to_origin 24-offline-z8
+ui 24-offline-z8
+top=$(panel_top 24-offline-z8)
+offline_px=$(corridor_pixels 24-offline-z8 "$top")
+echo "corridor pixels near $ROUTE_FROM at zoom 8 in airplane mode: $offline_px (online: $ready_px, before the download: $before_px)"
+[ "$offline_px" -ge $((before_px + 1000)) ] || fail "the downloaded corridor doesn't show in airplane mode ($offline_px pixels; 24-offline-z8.png)"
+
+echo "== Stored maps"
+tap 24-offline-z8 "^Stored maps$"
+wait_for 25-stored "^Total: " 10
+expect 25-stored "$ROUTE_FROM → $ROUTE_TO"
+expect 25-stored "^Delete$"
+shot 25-stored-maps
+adb shell input keyevent KEYCODE_BACK
+wait_for 25-back "^Ready for offline" 10
+adb shell cmd connectivity airplane-mode disable
+no_crash "stored maps"
 
 adb logcat -d > "$OUT/logcat.txt"
 echo "PASS: all smoke checks"

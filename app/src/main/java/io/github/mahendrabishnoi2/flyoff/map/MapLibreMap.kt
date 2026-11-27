@@ -79,6 +79,12 @@ private const val WORLD_SIZE_DP = 512.0
  * @param onLoadFailed called with MapLibre's message if the bundled style can't be loaded.
  * @param track the recorded flown track, longitudes unwrapped; drawn again only when it changes.
  * @param trackHead the live fix the track's last point joins up to, or null.
+ * @param styleJson the style to show instead of the bundled [STYLE_URI]: the world merged with a
+ *   downloaded corridor ([mergeCorridorStyle]), or null for the bundled style alone. A change
+ *   loads the new style; the route, track and dot are drawn again on it.
+ * @param maxZoom how far the user may zoom in: [MAX_ZOOM], or more with a detailed corridor.
+ * @param onCorridorShown called after each style load with whether it shows the corridor
+ *   (true as soon as a corridor style starts loading), and with false when the map goes away.
  */
 @Composable
 fun MapLibreMap(
@@ -95,6 +101,9 @@ fun MapLibreMap(
     onLoadFailed: (String) -> Unit,
     track: List<LatLon>,
     trackHead: LatLon?,
+    styleJson: String?,
+    maxZoom: Double,
+    onCorridorShown: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -103,7 +112,10 @@ fun MapLibreMap(
         createMapView(context, savedState = null)
     }
     var nativeMap by remember(mapView) { mutableStateOf<NativeMap?>(null) }
-    var styleLoaded by remember(mapView) { mutableStateOf(false) }
+    // The loaded style, or null while one loads. The effects below are keyed on it, not on a
+    // loaded flag: a style can load within one frame, and a flag going false and back to true
+    // unseen would leave the new style without the route.
+    var loadedStyle by remember(mapView) { mutableStateOf<Style?>(null) }
     var dotStyles by remember(mapView) { mutableStateOf<DotStyles?>(null) }
     var viewSize by remember(mapView) { mutableStateOf(IntSize.Zero) }
     var lastFit by remember(mapView) { mutableStateOf<FitRequest?>(null) }
@@ -111,6 +123,7 @@ fun MapLibreMap(
     val currentOnLoadFailed by rememberUpdatedState(onLoadFailed)
     val currentFollowing by rememberUpdatedState(following)
     val currentOnCameraMovedByUser by rememberUpdatedState(onCameraMovedByUser)
+    val currentOnCorridorShown by rememberUpdatedState(onCorridorShown)
 
     // Compose forgets effects in reverse order, so the observer below is removed
     // (and the map paused and stopped) before this effect destroys the map.
@@ -160,19 +173,41 @@ fun MapLibreMap(
 
     LaunchedEffect(mapView) {
         mapView.getMapAsync { map ->
-            nativeMap = map
             map.setMinZoomPreference(MIN_ZOOM)
-            map.setMaxZoomPreference(MAX_ZOOM)
             map.addOnCameraMoveStartedListener { reason ->
                 if (reason == NativeMap.OnCameraMoveStartedListener.REASON_API_GESTURE) currentOnCameraMovedByUser()
             }
-            map.setStyle(Style.Builder().fromUri(STYLE_URI)) { style ->
-                // Before the location component, so the dot is drawn above the route.
-                addRouteLayers(style)
-                activateLocationComponent(context, map.locationComponent, style) { currentOnFollowingChange(false) }
-                dotStyles = DotStyles(map.locationComponent.locationComponentOptions)
-                styleLoaded = true
+            nativeMap = map
+        }
+    }
+
+    DisposableEffect(mapView) {
+        onDispose { currentOnCorridorShown(false) }
+    }
+
+    LaunchedEffect(nativeMap, maxZoom) {
+        nativeMap?.setMaxZoomPreference(maxZoom)
+    }
+
+    // The style, loaded again whenever it changes (a corridor downloaded, or a download starting).
+    LaunchedEffect(nativeMap, styleJson) {
+        val map = nativeMap ?: return@LaunchedEffect
+        val corridor = styleJson != null
+        // Before loading starts: a corridor style may ask for tiles at once.
+        if (corridor) currentOnCorridorShown(true)
+        loadedStyle = null
+        val builder = if (styleJson != null) Style.Builder().fromJson(styleJson) else Style.Builder().fromUri(STYLE_URI)
+        map.setStyle(builder) { style ->
+            // Before the location component, so the dot is drawn above the route.
+            addRouteLayers(style)
+            val component = map.locationComponent
+            // The component follows later style changes itself.
+            if (!component.isLocationComponentActivated) {
+                activateLocationComponent(context, component, style) { currentOnFollowingChange(false) }
+                dotStyles = DotStyles(component.locationComponentOptions)
             }
+            loadedStyle = style
+            currentOnCorridorShown(corridor)
         }
     }
 
@@ -191,30 +226,30 @@ fun MapLibreMap(
 
     // One effect sets the dot and camera from the current inputs, so nothing
     // depends on effect order. Each step only changes what differs.
-    LaunchedEffect(styleLoaded, showLocation, location, estimated, following) {
+    LaunchedEffect(loadedStyle, showLocation, location, estimated, following) {
         val map = nativeMap ?: return@LaunchedEffect
         val styles = dotStyles ?: return@LaunchedEffect
-        if (styleLoaded) syncLocation(map, showLocation, location, estimated, styles) { currentFollowing }
+        if (loadedStyle != null) syncLocation(map, showLocation, location, estimated, styles) { currentFollowing }
     }
 
-    LaunchedEffect(styleLoaded, track) {
-        val style = nativeMap?.style ?: return@LaunchedEffect
-        if (styleLoaded) showTrack(style, track)
+    LaunchedEffect(loadedStyle, track) {
+        val style = loadedStyle ?: return@LaunchedEffect
+        showTrack(style, track)
     }
 
-    LaunchedEffect(styleLoaded, track, trackHead) {
-        val style = nativeMap?.style ?: return@LaunchedEffect
-        if (styleLoaded) showTrackHead(style, track.lastOrNull(), trackHead)
+    LaunchedEffect(loadedStyle, track, trackHead) {
+        val style = loadedStyle ?: return@LaunchedEffect
+        showTrackHead(style, track.lastOrNull(), trackHead)
     }
 
-    LaunchedEffect(styleLoaded, route) {
-        val style = nativeMap?.style ?: return@LaunchedEffect
-        if (styleLoaded) showRoute(style, route)
+    LaunchedEffect(loadedStyle, route) {
+        val style = loadedStyle ?: return@LaunchedEffect
+        showRoute(style, route)
     }
 
-    LaunchedEffect(styleLoaded, route, fitRoute, routePadding, viewSize, density) {
+    LaunchedEffect(loadedStyle, route, fitRoute, routePadding, viewSize, density) {
         val map = nativeMap ?: return@LaunchedEffect
-        if (!styleLoaded || !fitRoute || route == null) {
+        if (loadedStyle == null || !fitRoute || route == null) {
             lastFit = null
             return@LaunchedEffect
         }
@@ -342,7 +377,7 @@ private fun createMapView(context: Context, savedState: Bundle?): MapView {
                 .build(),
         )
         .minZoomPreference(MIN_ZOOM)
-        .maxZoomPreference(MAX_ZOOM)
+        .maxZoomPreference(MAX_CORRIDOR_ZOOM)
     return MapView(context, options).apply { onCreate(savedState) }
 }
 

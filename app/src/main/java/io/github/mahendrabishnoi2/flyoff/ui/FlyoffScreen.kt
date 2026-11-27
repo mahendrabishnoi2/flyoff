@@ -57,6 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mahendrabishnoi2.flyoff.R
+import io.github.mahendrabishnoi2.flyoff.download.CorridorPlan
+import io.github.mahendrabishnoi2.flyoff.download.DownloadKind
+import io.github.mahendrabishnoi2.flyoff.download.DownloadRequest
+import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
 import io.github.mahendrabishnoi2.flyoff.flight.DeadReckoning
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.FlightPlan
@@ -80,6 +84,8 @@ import io.github.mahendrabishnoi2.flyoff.location.rememberLocationPermission
 import io.github.mahendrabishnoi2.flyoff.location.summary
 import io.github.mahendrabishnoi2.flyoff.location.text
 import io.github.mahendrabishnoi2.flyoff.location.toGpsFix
+import io.github.mahendrabishnoi2.flyoff.map.MAX_CORRIDOR_ZOOM
+import io.github.mahendrabishnoi2.flyoff.map.MAX_ZOOM
 import io.github.mahendrabishnoi2.flyoff.map.MapInsets
 import io.github.mahendrabishnoi2.flyoff.map.MapLibreMap
 import io.github.mahendrabishnoi2.flyoff.map.MapRoute
@@ -112,6 +118,17 @@ fun FlyoffScreen() {
     val search = (airports.state as? AirportsState.Ready)?.search
     val plan = remember(flightCodes, search) { search?.let { s -> flightCodes?.resolve(s::byIata) } }
     var setupOpen by rememberSaveable { mutableStateOf(false) }
+    var storedMapsOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Route maps: what is stored (read once at start, which also deletes expired maps), the
+    // plans for this flight, and the downloaded corridor on the map.
+    val routeMaps by RouteMaps.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { RouteMaps.refresh(context) }
+    val flightMaps = plan?.let { routeMaps.flight(it.origin.iata, it.destination.iata) }
+    val routePlan = rememberCorridorPlan(plan, DownloadKind.ROUTE)
+    val routeReady = flightMaps?.isReady(DownloadKind.ROUTE) == true
+    val detailedPlan = rememberCorridorPlan(plan, DownloadKind.DETAILED, enabled = routeReady)
+    val corridor = rememberCorridorStyle(flightMaps, downloading = routeMaps.running != null)
 
     // The flight simulator. It belongs to one flight, and is ignored for any other.
     var simulation by rememberSaveable(stateSaver = SimulationStateSaver) { mutableStateOf<SimulationState?>(null) }
@@ -229,6 +246,8 @@ fun FlyoffScreen() {
 
     fun setFlight(codes: FlightCodes?) {
         if (codes != flightCodes) {
+            // A download belongs to the flight it was started for.
+            if (routeMaps.running != null) RouteMaps.cancel()
             simulation = null
             cameraMovedByUser = false
             // The track belongs to one flight: a new or cleared flight stops it (or forgets an
@@ -274,10 +293,13 @@ fun FlyoffScreen() {
             onLoadFailed = { mapError = it },
             track = trackLine,
             trackHead = trackHead,
+            styleJson = corridor?.styleJson,
+            maxZoom = if (corridor != null && corridor.maxZoom > MAX_ZOOM) MAX_CORRIDOR_ZOOM else MAX_ZOOM,
+            onCorridorShown = RouteMaps::setCorridorShown,
             modifier = Modifier.fillMaxSize(),
         )
         // Not composed under the setup screen, so screen readers don't find it there.
-        if (!setupOpen) Box(
+        if (!setupOpen && !storedMapsOpen) Box(
             modifier = Modifier
                 .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -365,6 +387,31 @@ fun FlyoffScreen() {
                     val sim = activeSimulation ?: return@StatusPanel
                     simulation = sim.copy(gaps = on)
                 },
+                routeMap = RouteMapControls(
+                    routePlan = routePlan,
+                    detailedPlan = detailedPlan,
+                    maps = flightMaps,
+                    running = routeMaps.running?.takeIf { plan != null && it.origin == plan.origin.iata && it.destination == plan.destination.iata },
+                    otherRunning = routeMaps.running != null && (plan == null || routeMaps.running?.origin != plan.origin.iata || routeMaps.running?.destination != plan.destination.iata),
+                    problem = plan?.let { routeMaps.problemFor(it.origin.iata, it.destination.iata) },
+                    mobileDataAllowed = routeMaps.mobileDataAllowed,
+                    compact = trackingActive,
+                ),
+                showStoredMaps = routeMaps.flights.isNotEmpty(),
+                onDownloadMap = { corridorPlan, index ->
+                    val current = plan ?: return@StatusPanel
+                    RouteMaps.start(
+                        context,
+                        DownloadRequest(current.origin.iata, current.destination.iata, corridorPlan.kind, corridorPlan.chunks[index], corridorPlan.chunks.size),
+                    )
+                },
+                onCancelDownload = RouteMaps::cancel,
+                onReplaceMaps = {
+                    val current = plan ?: return@StatusPanel
+                    RouteMaps.clearProblem()
+                    RouteMaps.deleteFlight(context, current.origin.iata, current.destination.iata)
+                },
+                onOpenStoredMaps = { storedMapsOpen = true },
                 modifier = Modifier
                     .widthIn(max = if (landscape) 480.dp else 560.dp)
                     .fillMaxWidth()
@@ -376,7 +423,7 @@ fun FlyoffScreen() {
             )
         }
         // After the panel, so the panel can never draw over it; placed in the free map area.
-        if (simulating && !setupOpen) {
+        if (simulating && !setupOpen && !storedMapsOpen) {
             val freeSide = panel?.let { freeSide(widthPx, heightPx, it) } ?: FreeSide.ABOVE
             val toDp = { px: Int -> with(density) { px.toDp() } }
             SimulatedBadge(
@@ -395,6 +442,14 @@ fun FlyoffScreen() {
                     )
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(top = 8.dp, start = 16.dp, end = 16.dp),
+            )
+        }
+        if (storedMapsOpen) {
+            StoredMapsScreen(
+                state = routeMaps,
+                onMobileDataAllowed = { RouteMaps.setMobileDataAllowed(context, it) },
+                onDelete = { RouteMaps.deleteFlight(context, it.origin, it.destination) },
+                onClose = { storedMapsOpen = false },
             )
         }
         if (setupOpen) {
@@ -458,6 +513,12 @@ private fun StatusPanel(
     onSimulatorSpeed: (Int) -> Unit,
     onSimulatorStop: () -> Unit,
     onSimulatorGaps: (Boolean) -> Unit,
+    routeMap: RouteMapControls,
+    showStoredMaps: Boolean,
+    onDownloadMap: (CorridorPlan, Int) -> Unit,
+    onCancelDownload: () -> Unit,
+    onReplaceMaps: () -> Unit,
+    onOpenStoredMaps: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -466,6 +527,7 @@ private fun StatusPanel(
         // cards below them scroll, anchored at the bottom so the flight card stays in view.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (plan == null && !flightPending) {
+                if (showStoredMaps) TextButton(onClick = onOpenStoredMaps) { Text(stringResource(R.string.stored_maps)) }
                 FilledTonalButton(onClick = onSetUpFlight) { Text(stringResource(R.string.set_up_flight)) }
             }
             if (showFollow) {
@@ -550,6 +612,11 @@ private fun StatusPanel(
                     onSimulatorSpeed = onSimulatorSpeed,
                     onSimulatorStop = onSimulatorStop,
                     onSimulatorGaps = onSimulatorGaps,
+                    routeMap = routeMap,
+                    onDownloadMap = onDownloadMap,
+                    onCancelDownload = onCancelDownload,
+                    onReplaceMaps = onReplaceMaps,
+                    onOpenStoredMaps = onOpenStoredMaps,
                 )
             }
         }

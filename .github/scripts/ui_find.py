@@ -15,6 +15,7 @@ Usage: python3 -I ui_find.py <command> <ui.xml> <regex> [attribute]
           ancestor (a Compose chip's label is a child TextView that is never checked)
   height  print the height in pixels of the first matching node as drawn: a node
           partly scrolled or clipped out of view reports only its visible part
+  top     print the y of the first matching node's top edge
 
 Exits 1 with a message on stderr when nothing matches, 2 on a bad file.
 """
@@ -82,7 +83,7 @@ def number(text):
 
 
 def main(argv):
-    if len(argv) < 4 or argv[1] not in ("has", "center", "number", "attr", "height"):
+    if len(argv) < 4 or argv[1] not in ("has", "center", "number", "attr", "height", "top"):
         print(__doc__, file=sys.stderr)
         return 2
     command, path, pattern = argv[1:4]
@@ -100,6 +101,8 @@ def main(argv):
     elif command == "height":
         _, y1, _, y2 = bounds(node)
         print(y2 - y1)
+    elif command == "top":
+        print(bounds(node)[1])
     else:
         if len(argv) < 5:
             print("attr needs an attribute name", file=sys.stderr)

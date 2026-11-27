@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.mahendrabishnoi2.flyoff.R
+import io.github.mahendrabishnoi2.flyoff.download.CorridorPlan
 import io.github.mahendrabishnoi2.flyoff.flight.FlightPlan
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStats
 import io.github.mahendrabishnoi2.flyoff.flight.SimulationTimeline
@@ -70,8 +71,8 @@ data class TrackingControls(
 
 /**
  * The flight card in the bottom panel: the route, then the live stats once there is a position
- * (real, simulated or estimated), a status line, then either the simulator's controls or
- * tracking and the actions. Tracking isn't offered while simulating, nor the simulator while
+ * (real, simulated or estimated), a status line, the route map downloads ([RouteMapSection]),
+ * then either the simulator's controls or tracking and the actions. Tracking isn't offered while simulating, nor the simulator while
  * tracking.
  *
  * The simulator controls are the card's last row, so they keep their place on screen as the
@@ -93,6 +94,11 @@ fun FlightCard(
     onSimulatorSpeed: (Int) -> Unit,
     onSimulatorStop: () -> Unit,
     onSimulatorGaps: (Boolean) -> Unit,
+    routeMap: RouteMapControls,
+    onDownloadMap: (CorridorPlan, Int) -> Unit,
+    onCancelDownload: () -> Unit,
+    onReplaceMaps: () -> Unit,
+    onOpenStoredMaps: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalConfiguration.current.locales[0]
@@ -132,6 +138,10 @@ fun FlightCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (statusLine.estimated) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            // Not while simulating: the simulator's controls stay the card's last row.
+            if (simulator == null) {
+                RouteMapSection(routeMap, onDownloadMap, onCancelDownload, onReplaceMaps, onOpenStoredMaps)
             }
             when {
                 simulator != null -> SimulatorBar(simulator, onSimulatorPlayPause, onSimulatorSpeed, onSimulatorStop, onSimulatorGaps)

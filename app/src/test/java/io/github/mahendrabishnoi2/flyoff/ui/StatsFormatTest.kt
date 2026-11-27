@@ -163,4 +163,19 @@ class StatsFormatTest {
         assertEquals(UNKNOWN, text.text)
         assertFalse(text.inUtc)
     }
+
+    @Test
+    fun `download estimates round up to whole megabytes`() {
+        assertEquals("34 MB", formatUpToMegabytes(33_000_001, us))
+        assertEquals("33 MB", formatUpToMegabytes(33_000_000, us))
+        assertEquals("1 MB", formatUpToMegabytes(0, us))
+        assertEquals("1,200 MB", formatUpToMegabytes(1_200_000_000, us))
+    }
+
+    @Test
+    fun `stored sizes have one decimal`() {
+        assertEquals("12.3 MB", formatMegabytes(12_345_678, us))
+        assertEquals("12,3 MB", formatMegabytes(12_345_678, germany))
+        assertEquals("0.0 MB", formatMegabytes(0, us))
+    }
 }
