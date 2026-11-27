@@ -16,6 +16,7 @@ import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.Position
 import io.github.mahendrabishnoi2.flyoff.flight.SimulationTimeline
 import io.github.mahendrabishnoi2.flyoff.geo.LatLon
+import io.github.mahendrabishnoi2.flyoff.location.gpsCourse
 import kotlinx.coroutines.delay
 
 /**
@@ -103,6 +104,6 @@ fun Location.toPosition(): Position = Position(
     latLon = LatLon(latitude, longitude),
     altitudeMeters = if (hasAltitude()) altitude else null,
     speedMetersPerSecond = if (hasSpeed()) speed.toDouble() else null,
-    bearingDegrees = if (hasBearing()) bearing.toDouble() else null,
+    bearingDegrees = gpsCourse(hasBearing(), bearing, hasSpeed(), speed),
     timeMillis = time,
 )
