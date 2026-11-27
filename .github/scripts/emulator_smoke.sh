@@ -48,7 +48,22 @@ find_xy() { python3 -I "$SCRIPTS/ui_find.py" center "$OUT/$1.xml" "$2" || fail "
 
 tap_xy() { adb shell input tap $1; }
 
-tap() { local xy; xy=$(find_xy "$1" "$2"); tap_xy "$xy"; }
+# Tap the node matching $2, re-dumping as $1 until its centre stops moving:
+# a panel that is still resizing (e.g. right after Stop) would make a stale
+# position land on the wrong control.
+tap() {
+  local name="$1" pattern="$2" xy prev i
+  xy=$(find_xy "$name" "$pattern")
+  for i in 1 2 3 4 5; do
+    sleep 1
+    ui "$name"
+    prev="$xy"
+    xy=$(find_xy "$name" "$pattern")
+    [ "$xy" = "$prev" ] && break
+  done
+  [ "$xy" = "$prev" ] || fail "'$pattern' kept moving ($name)"
+  tap_xy "$xy"
+}
 
 # A number read from the first node matching $2, whose first group is the number.
 read_number() { python3 -I "$SCRIPTS/ui_find.py" number "$OUT/$1.xml" "$2" || fail "no '$2' to read ($1)"; }
