@@ -1,5 +1,6 @@
 package io.github.mahendrabishnoi2.flyoff.geo
 
+import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.ceil
@@ -125,7 +126,7 @@ object Geodesy {
         points += a
         for (i in 1..segments) {
             val next = if (i == segments) b else interpolate(a, b, i.toDouble() / segments)
-            points += next.copy(longitude = unwrap(next.longitude, points.last().longitude))
+            points += next.copy(longitude = unwrapLongitude(next.longitude, points.last().longitude))
         }
         return points
     }
@@ -143,14 +144,6 @@ object Geodesy {
 
     /** Angle between two unit vectors, accurate at every size. */
     private fun angle(a: Vector, b: Vector): Double = atan2(a.cross(b).norm(), a.dot(b))
-
-    /** [longitude] shifted by a multiple of 360° to lie within 180° of [previous]. */
-    private fun unwrap(longitude: Double, previous: Double): Double {
-        var lon = longitude
-        while (lon - previous > 180.0) lon -= 360.0
-        while (lon - previous < -180.0) lon += 360.0
-        return lon
-    }
 
     private fun normalizeBearing(degrees: Double): Double {
         val b = degrees % 360.0
@@ -188,4 +181,33 @@ object Geodesy {
         val lon = Math.toRadians(longitude)
         return Vector(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat))
     }
+}
+
+/**
+ * [points] with each longitude moved by ±360° so that consecutive points are never more than 180°
+ * apart, so a line drawn through them crosses the antimeridian instead of going round the world.
+ * The first point is kept as given and each later one follows the one before it, so an eastbound
+ * Pacific crossing keeps counting past 180 (170, 179, 185, …) and a westbound one past -180.
+ * Latitudes are unchanged. This is how [Geodesy.greatCirclePoints] unwraps its points; use it for
+ * a recorded track.
+ */
+fun unwrapLongitudes(points: List<LatLon>): List<LatLon> {
+    if (points.isEmpty()) return points
+    val unwrapped = ArrayList<LatLon>(points.size)
+    unwrapped += points.first()
+    for (i in 1 until points.size) {
+        val point = points[i]
+        unwrapped += point.copy(longitude = unwrapLongitude(point.longitude, unwrapped.last().longitude))
+    }
+    return unwrapped
+}
+
+/** [longitude] shifted by a multiple of 360° to lie within 180° of [previous]. */
+private fun unwrapLongitude(longitude: Double, previous: Double): Double {
+    var lon = longitude
+    // Far apart (any finite longitude is allowed): jump there in one step instead of 360° at a time.
+    if (abs(lon - previous) > 720.0) lon = previous + Math.IEEEremainder(lon - previous, 360.0)
+    while (lon - previous > 180.0) lon -= 360.0
+    while (lon - previous < -180.0) lon += 360.0
+    return lon
 }

@@ -55,11 +55,21 @@ private const val ROUTE_LAYER = "flyoff-route-line"
 private const val AIRPORT_DOT_LAYER = "flyoff-airport-dot"
 private const val AIRPORT_LABEL_LAYER = "flyoff-airport-label"
 private const val IATA_PROPERTY = "iata"
+private const val TRACK_SOURCE = "flyoff-track"
+private const val TRACK_HEAD_SOURCE = "flyoff-track-head"
+private const val TRACK_LAYER = "flyoff-track-line"
+private const val TRACK_HEAD_LAYER = "flyoff-track-head-line"
 
 // A magenta that stands apart from the style's beige land, blue water and purple-grey borders.
 private const val ROUTE_COLOR = "#c2185b"
 private const val LABEL_COLOR = "#7a0f3a"
 private const val WHITE = "#ffffff"
+
+/**
+ * The flown track: a strong blue, unlike the magenta route, the pale blue water (#a9cbe3) and the
+ * purple-grey borders.
+ */
+const val TRACK_COLOR = "#1565c0"
 
 /**
  * Adds the (empty) route sources and layers. Call it once per style load, before the location
@@ -75,7 +85,23 @@ fun addRouteLayers(style: Style) {
         lineCap(Property.LINE_CAP_ROUND),
         lineJoin(Property.LINE_JOIN_ROUND),
     )
-    if (style.getLayer(ROUTE_BELOW_LAYER) != null) style.addLayerBelow(line, ROUTE_BELOW_LAYER) else style.addLayer(line)
+    addBelowLabels(style, line)
+
+    // The flown track goes over the planned route, still under the labels. Two sources: the
+    // recorded points change at most every 5 s, the short head to the live fix every second.
+    style.addSource(GeoJsonSource(TRACK_SOURCE))
+    style.addSource(GeoJsonSource(TRACK_HEAD_SOURCE))
+    for ((id, source) in listOf(TRACK_LAYER to TRACK_SOURCE, TRACK_HEAD_LAYER to TRACK_HEAD_SOURCE)) {
+        addBelowLabels(
+            style,
+            LineLayer(id, source).withProperties(
+                lineColor(TRACK_COLOR),
+                lineWidth(3.5f),
+                lineCap(Property.LINE_CAP_ROUND),
+                lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
 
     // The end markers go on top of the map labels: the airports matter more than a city name,
     // and symbol layers higher up are placed first, so city labels make way for them.
@@ -122,6 +148,32 @@ fun showRoute(style: Style, route: MapRoute?) {
             ),
         ),
     )
+}
+
+/**
+ * Shows the recorded track [points] (longitudes already unwrapped, see `unwrapLongitudes`);
+ * fewer than two points draw nothing. Call it only when the points change.
+ */
+fun showTrack(style: Style, points: List<LatLon>) {
+    style.getSourceAs<GeoJsonSource>(TRACK_SOURCE)?.setGeoJson(lineOrNothing(points))
+}
+
+/** The track's head: from its last recorded point [from] to the live fix [to] (either may be null). */
+fun showTrackHead(style: Style, from: LatLon?, to: LatLon?) {
+    style.getSourceAs<GeoJsonSource>(TRACK_HEAD_SOURCE)?.setGeoJson(lineOrNothing(listOfNotNull(from, to)))
+}
+
+private fun lineOrNothing(points: List<LatLon>): FeatureCollection =
+    if (points.size < 2) {
+        FeatureCollection.fromFeatures(emptyList())
+    } else {
+        FeatureCollection.fromFeature(
+            Feature.fromGeometry(LineString.fromLngLats(points.map { Point.fromLngLat(it.longitude, it.latitude) })),
+        )
+    }
+
+private fun addBelowLabels(style: Style, layer: LineLayer) {
+    if (style.getLayer(ROUTE_BELOW_LAYER) != null) style.addLayerBelow(layer, ROUTE_BELOW_LAYER) else style.addLayer(layer)
 }
 
 private fun endFeature(point: Point, label: String): Feature =

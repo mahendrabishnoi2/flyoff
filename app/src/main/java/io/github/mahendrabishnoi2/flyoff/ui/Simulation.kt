@@ -23,9 +23,15 @@ import kotlinx.coroutines.delay
  * A flight-simulator replay: which flight, its [timeline], and the wall-clock time of its
  * take-off ([takeoffMillis], so simulated fixes carry plausible times and the ETA is the
  * simulated flight's arrival). [takeoffMillis] is null until the replay is first started; the
- * plane is parked at the origin until then.
+ * plane is parked at the origin until then. With [gaps] on, the simulated GPS drops out during
+ * [io.github.mahendrabishnoi2.flyoff.flight.GpsGaps], to try out the estimated position.
  */
-data class SimulationState(val codes: FlightCodes, val timeline: SimulationTimeline, val takeoffMillis: Long?)
+data class SimulationState(
+    val codes: FlightCodes,
+    val timeline: SimulationTimeline,
+    val takeoffMillis: Long?,
+    val gaps: Boolean = false,
+)
 
 /**
  * Saves a replay across rotation and process death as plain values. The timeline's clock is
@@ -38,7 +44,7 @@ val SimulationStateSaver: Saver<SimulationState?, Any> = Saver(
             arrayListOf<Any?>(
                 it.codes.origin, it.codes.destination, it.takeoffMillis,
                 it.timeline.durationSeconds, it.timeline.speed, it.timeline.running,
-                it.timeline.elapsedAtAnchor, it.timeline.anchorMillis,
+                it.timeline.elapsedAtAnchor, it.timeline.anchorMillis, it.gaps,
             )
         }
     },
@@ -55,6 +61,7 @@ val SimulationStateSaver: Saver<SimulationState?, Any> = Saver(
                     elapsedAtAnchor = v[6] as Double,
                     anchorMillis = v[7] as Long,
                 ),
+                gaps = v.getOrNull(8) as? Boolean ?: false,
             )
         }.getOrNull()
     },
@@ -89,8 +96,11 @@ fun rememberSimulationClock(state: SimulationState?): Long {
 /** Marks fixes from the simulator; nothing outside the app ever sees them. */
 private const val SIMULATOR_PROVIDER = "flyoff-simulator"
 
-/** A simulated position as a [Location] for the map's location component. */
-fun Position.toLocation(): Location = Location(SIMULATOR_PROVIDER).also { location ->
+/** Marks dead-reckoning estimates, which also stay inside the app. */
+private const val ESTIMATE_PROVIDER = "flyoff-estimate"
+
+/** A simulated or estimated position as a [Location] for the map's location component. */
+fun Position.toLocation(): Location = Location(if (estimated) ESTIMATE_PROVIDER else SIMULATOR_PROVIDER).also { location ->
     location.latitude = latLon.latitude
     location.longitude = latLon.longitude
     location.time = timeMillis

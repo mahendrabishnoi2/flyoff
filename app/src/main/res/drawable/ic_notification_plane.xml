@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A plane seen from above, nose up: the tracking notification's small icon. Drawn for Flyoff.
+     Notification icons are monochrome; only the alpha counts. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2C12.8,2 13.2,2.9 13.2,4L13.2,9L21.5,13.6L21.5,15.4L13.2,12.8L13.2,18.1L15.8,20L15.8,21.5L12,20.5L8.2,21.5L8.2,20L10.8,18.1L10.8,12.8L2.5,15.4L2.5,13.6L10.8,9L10.8,4C10.8,2.9 11.2,2 12,2Z" />
+</vector>

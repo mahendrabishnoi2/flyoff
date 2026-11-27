@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The estimated position's dot without a heading: a grey disc (#a1b0c0). Drawn for Flyoff. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="14"
+    android:viewportHeight="14">
+    <path
+        android:fillColor="#A1B0C0"
+        android:pathData="M7,0a7,7 0,1 1,0 14a7,7 0,1 1,0 -14z" />
+</vector>

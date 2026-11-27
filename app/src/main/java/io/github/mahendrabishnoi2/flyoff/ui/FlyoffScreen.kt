@@ -1,6 +1,11 @@
 package io.github.mahendrabishnoi2.flyoff.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,6 +35,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.AbsoluteAlignment
@@ -47,21 +54,31 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mahendrabishnoi2.flyoff.R
+import io.github.mahendrabishnoi2.flyoff.flight.DeadReckoning
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.FlightPlan
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStats
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStatsCalculator
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStore
 import io.github.mahendrabishnoi2.flyoff.flight.SimulationTimeline
-import io.github.mahendrabishnoi2.flyoff.flight.simulatorPosition
+import io.github.mahendrabishnoi2.flyoff.flight.simulatorFix
+import io.github.mahendrabishnoi2.flyoff.geo.LatLon
+import io.github.mahendrabishnoi2.flyoff.geo.unwrapLongitudes
 import io.github.mahendrabishnoi2.flyoff.location.GpsState
 import io.github.mahendrabishnoi2.flyoff.location.LocationAccess
 import io.github.mahendrabishnoi2.flyoff.location.LocationPermission
+import io.github.mahendrabishnoi2.flyoff.location.gpsReadiness
+import io.github.mahendrabishnoi2.flyoff.location.openBatterySaverSettings
 import io.github.mahendrabishnoi2.flyoff.location.openLocationSettings
+import io.github.mahendrabishnoi2.flyoff.location.rememberBatterySaverLimitsGps
+import io.github.mahendrabishnoi2.flyoff.location.rememberGnssSatellites
 import io.github.mahendrabishnoi2.flyoff.location.rememberGpsUpdates
 import io.github.mahendrabishnoi2.flyoff.location.rememberLocationPermission
 import io.github.mahendrabishnoi2.flyoff.location.summary
+import io.github.mahendrabishnoi2.flyoff.location.text
 import io.github.mahendrabishnoi2.flyoff.location.toGpsFix
 import io.github.mahendrabishnoi2.flyoff.map.MapInsets
 import io.github.mahendrabishnoi2.flyoff.map.MapLibreMap
@@ -71,11 +88,16 @@ import io.github.mahendrabishnoi2.flyoff.map.FreeSide
 import io.github.mahendrabishnoi2.flyoff.map.freeSide
 import io.github.mahendrabishnoi2.flyoff.map.ornamentInsets
 import io.github.mahendrabishnoi2.flyoff.map.routePadding
+import io.github.mahendrabishnoi2.flyoff.tracking.TrackedFlight
+import io.github.mahendrabishnoi2.flyoff.tracking.Tracker
+import io.github.mahendrabishnoi2.flyoff.tracking.TrackingError
+import io.github.mahendrabishnoi2.flyoff.tracking.estimatedPositionLine
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
  * The one screen: the offline map, with a panel at the bottom for location status, the flight
- * and its stats, and the flight simulator. Flight setup opens over it.
+ * and its stats, tracking, and the flight simulator. Flight setup opens over it.
  */
 @Composable
 fun FlyoffScreen() {
@@ -105,22 +127,50 @@ fun FlyoffScreen() {
             simulation = sim.copy(timeline = sim.timeline.paused(simulatorNow))
         }
     }
-    val simulatedPosition = if (plan != null && activeSimulation != null) {
-        simulatorPosition(
+    val simulated = if (plan != null && activeSimulation != null) {
+        simulatorFix(
             flight = plan.simulatedFlight,
             timeline = activeSimulation.timeline,
             takeoffMillis = activeSimulation.takeoffMillis,
             clockMillis = simulatorNow,
             wallMillis = System.currentTimeMillis(),
+            gaps = activeSimulation.gaps,
         )
     } else {
         null
     }
 
+    // Tracking: while the service runs it owns the GPS and the screen shows its fixes; otherwise
+    // the screen listens itself, only while visible. The service asks for fixes more often while
+    // the screen is visible.
+    val tracking by Tracker.state.collectAsStateWithLifecycle()
+    // Did Android end tracking (kill the app) while it was recording? Then offer to resume.
+    LaunchedEffect(Unit) { Tracker.restore(context) }
+    LifecycleStartEffect(Unit) {
+        Tracker.setUiVisible(true)
+        onStopOrDispose { Tracker.setUiVisible(false) }
+    }
+    val trackingActive = tracking.active
     // Real GPS is switched off while simulating, so a real fix can never mix with simulated ones.
-    val gps = rememberGpsUpdates(active = precise && !simulating)
-    val position = simulatedPosition ?: gps.location?.toPosition()
-    val mapLocation = remember(simulatedPosition, gps.location) { simulatedPosition?.toLocation() ?: gps.location }
+    val ownGps = rememberGpsUpdates(active = precise && !simulating && !trackingActive)
+    val gps = if (trackingActive) GpsState(ownGps.hasReceiver, tracking.providerEnabled, tracking.lastFix) else ownGps
+
+    // The last fix (simulated or real) and its age. With a flight set, a fix older than 10 s
+    // gives way to a dead-reckoning estimate toward the destination, moving every second.
+    val realFixAge = rememberFixAgeMillis(gps.location, enabled = plan != null && simulated == null) { fix, age ->
+        plan != null && DeadReckoning.estimate(plan.destinationLatLon, fix.toPosition(), age) != null
+    }
+    val lastFix = simulated?.position ?: gps.location?.toPosition()
+    val millisSinceFix = simulated?.millisSinceFix ?: realFixAge
+    val estimate = if (plan != null && lastFix != null && DeadReckoning.isStale(millisSinceFix)) {
+        DeadReckoning.estimate(plan.destinationLatLon, lastFix, millisSinceFix)
+    } else {
+        null
+    }
+    val position = estimate ?: lastFix
+    val mapLocation = remember(estimate, simulated?.position, gps.location) {
+        estimate?.toLocation() ?: simulated?.position?.toLocation() ?: gps.location
+    }
     val stats = if (plan != null && position != null) {
         FlightStatsCalculator.compute(plan.originLatLon, plan.destinationLatLon, position)
     } else {
@@ -135,10 +185,56 @@ fun FlyoffScreen() {
         plan?.let { MapRoute(it.routePoints, it.origin.iata, it.destination.iata) }
     }
 
+    // "GPS ready" before take-off: satellites are listened to only while this line shows (an
+    // estimate takes its place).
+    val readinessShown = plan != null && !simulating && precise && gps.hasReceiver && gps.providerEnabled && estimate == null
+    val satellites = rememberGnssSatellites(active = readinessShown)
+    val locale = LocalConfiguration.current.locales[0]
+    val statusLine = when {
+        estimate != null -> StatusLine(estimatedPositionLine(millisSinceFix), estimated = true)
+        readinessShown -> {
+            val fix = gps.location
+            val accuracy = if (fix != null && fix.hasAccuracy()) fix.accuracy else null
+            StatusLine(gpsReadiness(fix?.let { realFixAge }, accuracy, satellites).text(locale), estimated = false)
+        }
+        else -> null
+    }
+
+    // The recorded track of this flight, from the file after a restart; not under a simulation.
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(plan?.codes, trackingActive) {
+        val codes = plan?.codes ?: return@LaunchedEffect
+        if (!trackingActive) Tracker.loadTrack(context, codes)
+    }
+    val trackPoints = if (plan != null && !simulating && tracking.trackCodes == plan.codes) tracking.track else emptyList()
+    val trackLine = remember(trackPoints) { unwrapLongitudes(trackPoints.map { it.latLon }) }
+    val trackHead = gps.location?.takeIf { trackingActive && trackLine.isNotEmpty() }?.let {
+        unwrapLongitudes(listOf(trackLine.last(), LatLon(it.latitude, it.longitude)))[1]
+    }
+
+    // Start tracking; on Android 13+ ask for notifications first (tracking runs either way).
+    val notificationsEnabled = rememberNotificationsEnabled()
+    val currentPlan by rememberUpdatedState(plan)
+    val currentFix by rememberUpdatedState(gps.location)
+    val startTracking = {
+        currentPlan?.let { p ->
+            Tracker.start(context, TrackedFlight(p.codes, p.originLatLon, p.destinationLatLon, p.destination.timeZone), currentFix)
+        }
+        Unit
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        startTracking()
+    }
+    val batterySaverLimitsGps = rememberBatterySaverLimitsGps()
+
     fun setFlight(codes: FlightCodes?) {
         if (codes != flightCodes) {
             simulation = null
             cameraMovedByUser = false
+            // The track belongs to one flight: a new or cleared flight stops it (or forgets an
+            // interrupted one) and starts afresh.
+            Tracker.stop(context)
+            scope.launch { Tracker.forgetTrack(context) }
         }
         if (codes == null) store.clear() else store.save(codes)
         flightCodes = codes
@@ -167,6 +263,7 @@ fun FlyoffScreen() {
         MapLibreMap(
             location = mapLocation,
             showLocation = precise || activeSimulation != null,
+            estimated = estimate != null,
             following = following && mapLocation != null,
             onFollowingChange = { following = it },
             route = route,
@@ -175,6 +272,8 @@ fun FlyoffScreen() {
             onCameraMovedByUser = { cameraMovedByUser = true },
             ornamentInsets = ornaments,
             onLoadFailed = { mapError = it },
+            track = trackLine,
+            trackHead = trackHead,
             modifier = Modifier.fillMaxSize(),
         )
         // Not composed under the setup screen, so screen readers don't find it there.
@@ -192,7 +291,6 @@ fun FlyoffScreen() {
                 plan = plan,
                 stats = stats,
                 eta = if (plan != null && stats != null) {
-                    val locale = LocalConfiguration.current.locales[0]
                     formatEtaOrUtc(stats.etaMillis, position?.timeMillis ?: 0L, plan.destination.timeZone, locale)
                 } else {
                     null
@@ -203,8 +301,27 @@ fun FlyoffScreen() {
                         running = it.timeline.running,
                         atStart = it.takeoffMillis == null,
                         finished = it.timeline.isFinished(simulatorNow),
+                        gaps = it.gaps,
                     )
                 },
+                statusLine = statusLine,
+                tracking = TrackingControls(
+                    canStart = plan != null && precise && gps.hasReceiver && !simulating,
+                    active = trackingActive,
+                    points = tracking.track.size,
+                    notificationsOff = !notificationsEnabled,
+                ),
+                trackingError = tracking.error,
+                trackingInterrupted = !trackingActive && plan != null && tracking.interrupted == plan.codes,
+                onDismissInterrupted = { Tracker.dismissInterrupted(context) },
+                batterySaverLimitsGps = batterySaverLimitsGps && !simulating,
+                onStartTracking = {
+                    val needsAsking = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    if (needsAsking) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else startTracking()
+                },
+                onStopTracking = { Tracker.stop(context) },
+                onDismissTrackingError = Tracker::clearError,
                 simulating = simulating,
                 flightPending = flightPending,
                 showFollow = mapLocation != null,
@@ -244,6 +361,10 @@ fun FlyoffScreen() {
                     simulation = sim.copy(timeline = sim.timeline.withSpeed(speed, simulatorClockMillis()))
                 },
                 onSimulatorStop = { simulation = null },
+                onSimulatorGaps = { on ->
+                    val sim = activeSimulation ?: return@StatusPanel
+                    simulation = sim.copy(gaps = on)
+                },
                 modifier = Modifier
                     .widthIn(max = if (landscape) 480.dp else 560.dp)
                     .fillMaxWidth()
@@ -317,6 +438,15 @@ private fun StatusPanel(
     stats: FlightStats?,
     eta: EtaText?,
     simulator: SimulatorControls?,
+    statusLine: StatusLine?,
+    tracking: TrackingControls,
+    trackingError: TrackingError?,
+    trackingInterrupted: Boolean,
+    onDismissInterrupted: () -> Unit,
+    batterySaverLimitsGps: Boolean,
+    onStartTracking: () -> Unit,
+    onStopTracking: () -> Unit,
+    onDismissTrackingError: () -> Unit,
     simulating: Boolean,
     flightPending: Boolean,
     showFollow: Boolean,
@@ -327,6 +457,7 @@ private fun StatusPanel(
     onSimulatorPlayPause: () -> Unit,
     onSimulatorSpeed: (Int) -> Unit,
     onSimulatorStop: () -> Unit,
+    onSimulatorGaps: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -367,6 +498,38 @@ private fun StatusPanel(
                     onAction = airports.retry,
                 )
             }
+            if (trackingError != null) {
+                MessageCard(
+                    title = stringResource(R.string.tracking_stopped_title),
+                    body = stringResource(
+                        when (trackingError) {
+                            TrackingError.PERMISSION -> R.string.tracking_stopped_permission
+                            TrackingError.NOT_ALLOWED -> R.string.tracking_stopped_not_allowed
+                            TrackingError.NO_GPS -> R.string.tracking_stopped_no_gps
+                        },
+                    ),
+                    action = stringResource(R.string.ok),
+                    onAction = onDismissTrackingError,
+                )
+            }
+            if (trackingInterrupted) {
+                MessageCard(
+                    title = stringResource(R.string.tracking_stopped_title),
+                    body = stringResource(R.string.tracking_interrupted_body),
+                    action = stringResource(R.string.resume_tracking).takeIf { tracking.canStart },
+                    onAction = onStartTracking,
+                    secondaryAction = stringResource(R.string.dismiss),
+                    onSecondaryAction = onDismissInterrupted,
+                )
+            }
+            if (batterySaverLimitsGps) {
+                MessageCard(
+                    title = stringResource(R.string.battery_saver_title),
+                    body = stringResource(R.string.battery_saver_body),
+                    action = stringResource(R.string.battery_saver_settings),
+                    onAction = { openBatterySaverSettings(context) },
+                )
+            }
             // While simulating, the real GPS is off and its state doesn't matter.
             if (!simulating) {
                 GpsStatus(permission, gps, showFix = plan == null, context = context)
@@ -377,11 +540,16 @@ private fun StatusPanel(
                     stats = stats,
                     eta = eta,
                     simulator = simulator,
+                    statusLine = statusLine,
+                    tracking = tracking,
+                    onStartTracking = onStartTracking,
+                    onStopTracking = onStopTracking,
                     onChange = onSetUpFlight,
                     onSimulate = onSimulate,
                     onSimulatorPlayPause = onSimulatorPlayPause,
                     onSimulatorSpeed = onSimulatorSpeed,
                     onSimulatorStop = onSimulatorStop,
+                    onSimulatorGaps = onSimulatorGaps,
                 )
             }
         }
@@ -481,7 +649,7 @@ private fun MessageCard(
                 modifier = Modifier.semantics { heading() },
             )
             Text(text = body, style = MaterialTheme.typography.bodyMedium)
-            if (action != null) {
+            if (action != null || secondaryAction != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -489,7 +657,7 @@ private fun MessageCard(
                     if (secondaryAction != null) {
                         TextButton(onClick = onSecondaryAction) { Text(secondaryAction) }
                     }
-                    Button(onClick = onAction) { Text(action) }
+                    if (action != null) Button(onClick = onAction) { Text(action) }
                 }
             }
         }

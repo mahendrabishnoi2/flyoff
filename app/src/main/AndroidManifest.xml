@@ -3,9 +3,17 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The GPS dot. Coarse is listed too so Android 12+ can offer "approximate";
-         the app explains that the dot needs precise. Foreground only: no background location. -->
+         the app explains that the dot needs precise. No background location: tracking with the
+         screen off runs in a foreground service that the visible app starts, which while-in-use
+         location covers. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- The flight-tracking foreground service (type location) and its notification. On Android 13+
+         notifications are asked for when the user starts tracking; tracking runs without them. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- The app exists to show a GPS position, so app stores shouldn't offer it to
          devices without satellite GPS (lint warns about that; it is the point here).
@@ -38,6 +46,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Records the flight with the screen off; only the app itself starts or stops it. -->
+        <service
+            android:name=".tracking.FlightTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 
 </manifest>

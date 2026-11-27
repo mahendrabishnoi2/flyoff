@@ -26,6 +26,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.github.mahendrabishnoi2.flyoff.R
+import io.github.mahendrabishnoi2.flyoff.geo.LatLon
 import io.github.mahendrabishnoi2.flyoff.location.showsBearing
 import io.github.mahendrabishnoi2.flyoff.location.toGpsFix
 import org.maplibre.android.MapLibre
@@ -34,6 +36,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.OnCameraTrackingChangedListener
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -63,6 +66,8 @@ private const val WORLD_SIZE_DP = 512.0
  * @param location the latest position to draw (a GPS fix or a simulated one), or null for none yet.
  * @param showLocation whether the location dot may be shown: precise location is granted, or
  *   the flight simulator is running.
+ * @param estimated whether [location] is a dead-reckoning estimate rather than a fix: the dot is
+ *   then drawn grey (#a1b0c0, MapLibre's own stale grey).
  * @param following whether the camera follows the dot. A map gesture turns it off
  *   and reports that through [onFollowingChange].
  * @param route the flight's route to draw, or null for none.
@@ -72,11 +77,14 @@ private const val WORLD_SIZE_DP = 512.0
  * @param onCameraMovedByUser called when a map gesture starts moving the camera.
  * @param ornamentInsets space to keep free around the map's own attribution, logo and compass.
  * @param onLoadFailed called with MapLibre's message if the bundled style can't be loaded.
+ * @param track the recorded flown track, longitudes unwrapped; drawn again only when it changes.
+ * @param trackHead the live fix the track's last point joins up to, or null.
  */
 @Composable
 fun MapLibreMap(
     location: Location?,
     showLocation: Boolean,
+    estimated: Boolean,
     following: Boolean,
     onFollowingChange: (Boolean) -> Unit,
     route: MapRoute?,
@@ -85,6 +93,8 @@ fun MapLibreMap(
     onCameraMovedByUser: () -> Unit,
     ornamentInsets: MapInsets,
     onLoadFailed: (String) -> Unit,
+    track: List<LatLon>,
+    trackHead: LatLon?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -94,6 +104,7 @@ fun MapLibreMap(
     }
     var nativeMap by remember(mapView) { mutableStateOf<NativeMap?>(null) }
     var styleLoaded by remember(mapView) { mutableStateOf(false) }
+    var dotStyles by remember(mapView) { mutableStateOf<DotStyles?>(null) }
     var viewSize by remember(mapView) { mutableStateOf(IntSize.Zero) }
     var lastFit by remember(mapView) { mutableStateOf<FitRequest?>(null) }
     val currentOnFollowingChange by rememberUpdatedState(onFollowingChange)
@@ -159,6 +170,7 @@ fun MapLibreMap(
                 // Before the location component, so the dot is drawn above the route.
                 addRouteLayers(style)
                 activateLocationComponent(context, map.locationComponent, style) { currentOnFollowingChange(false) }
+                dotStyles = DotStyles(map.locationComponent.locationComponentOptions)
                 styleLoaded = true
             }
         }
@@ -179,9 +191,20 @@ fun MapLibreMap(
 
     // One effect sets the dot and camera from the current inputs, so nothing
     // depends on effect order. Each step only changes what differs.
-    LaunchedEffect(styleLoaded, showLocation, location, following) {
+    LaunchedEffect(styleLoaded, showLocation, location, estimated, following) {
         val map = nativeMap ?: return@LaunchedEffect
-        if (styleLoaded) syncLocation(map, showLocation, location) { currentFollowing }
+        val styles = dotStyles ?: return@LaunchedEffect
+        if (styleLoaded) syncLocation(map, showLocation, location, estimated, styles) { currentFollowing }
+    }
+
+    LaunchedEffect(styleLoaded, track) {
+        val style = nativeMap?.style ?: return@LaunchedEffect
+        if (styleLoaded) showTrack(style, track)
+    }
+
+    LaunchedEffect(styleLoaded, track, trackHead) {
+        val style = nativeMap?.style ?: return@LaunchedEffect
+        if (styleLoaded) showTrackHead(style, track.lastOrNull(), trackHead)
     }
 
     LaunchedEffect(styleLoaded, route) {
@@ -236,6 +259,8 @@ private fun syncLocation(
     map: NativeMap,
     showLocation: Boolean,
     location: Location?,
+    estimated: Boolean,
+    styles: DotStyles,
     following: () -> Boolean,
 ) {
     val component = map.locationComponent
@@ -243,6 +268,10 @@ private fun syncLocation(
     val visible = showLocation && location != null
     if (component.isLocationComponentEnabled != visible) component.isLocationComponentEnabled = visible
     if (!visible) return
+    if (styles.estimatedShown != estimated) {
+        component.applyStyle(if (estimated) styles.estimated else styles.live)
+        styles.estimatedShown = estimated
+    }
 
     val arrowNow = component.renderMode == RenderMode.GPS
     val arrow = location.toGpsFix().showsBearing(shownNow = arrowNow)
@@ -256,6 +285,26 @@ private fun syncLocation(
     } else if (!following() && tracking) {
         component.cameraMode = CameraMode.NONE
     }
+}
+
+/**
+ * The dot's two looks. MapLibre's own stale state can't mark an estimate: every
+ * `forceLocationUpdate` resets its stale timer, and the estimate is fed in every second.
+ *
+ * The estimate uses its own grey drawables (#a1b0c0, a blue-grey that reads as "not live" next
+ * to MapLibre's blue #4a90e2; CI looks for both) and no accuracy circle. It must not tint
+ * MapLibre's drawables instead: MapLibre tints the drawable it gets from the resource cache
+ * without `mutate()`, so the grey sticks to the cached copy and the live dot stays grey after
+ * the GPS is back, until that cache entry is garbage-collected.
+ */
+private class DotStyles(val live: LocationComponentOptions) {
+    val estimated: LocationComponentOptions = live.toBuilder()
+        .foregroundDrawable(R.drawable.dot_estimated)
+        .gpsDrawable(R.drawable.dot_estimated_puck)
+        .bearingDrawable(R.drawable.dot_estimated_bearing)
+        .accuracyAlpha(0f)
+        .build()
+    var estimatedShown = false
 }
 
 /**

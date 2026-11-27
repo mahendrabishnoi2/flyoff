@@ -19,8 +19,8 @@ Background research: [data sources and licensing](research/data-sources-validati
 |---|---|---|
 | 0 | Research and validation | ✅ Done |
 | 1 | Map and GPS dot | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m1-phone-test.md) pending |
-| 2 | Flight setup and stats | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m2-phone-test.md) pending |
-| 3 | Reliable tracking | Planned |
+| 2 | Flight setup and stats | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m2-phone-test.md) pending |
+| 3 | Reliable tracking | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m3-phone-test.md) pending |
 | 4 | Route map download | Planned |
 | 5 | Flight-number suggestion | Planned |
 | 6 | Extras | Planned |
@@ -133,8 +133,8 @@ Skills are added at the milestone that needs them, not all at once. **When you s
 | ✅ Milestone 1 (installed) | `android-ux` | `rcosteira79/android-skills` | Material 3 UX review |
 | ✅ Milestone 2 (installed) | `testing-setup` | `android/skills` | Guidance only. It adds Hilt, Robolectric, JaCoCo and Dropshots if missing. **Tell it not to**; add a test library only when a test needs it. |
 | ✅ Milestone 2 (installed) | `android-testing` | `rcosteira79/android-skills` | Test-first discipline; Compose UI and coroutine test patterns |
-| Milestone 3 | `android-profiler` | `android/skills` | Battery drain and wake locks |
-| Milestone 3 | `jetpack-compose-performance` | `android/skills` | Recomposition and frame-time audits |
+| ✅ Milestone 3 (installed, maintainer-approved) | `android-profiler` | `android/skills` | Battery drain and wake locks. **Runs remote code:** its bundled `trace_processor` wrapper downloads and runs a sha256-pinned Perfetto binary, and its recording workflow downloads Perfetto helper scripts from `google/perfetto` `main` (unpinned). Only for profiling on a device you control; read the scripts before running them. |
+| ✅ Milestone 3 (installed) | `jetpack-compose-performance` | `android/skills` | Recomposition and frame-time audits |
 | Release | `play-policy-insights` | `android/skills` | **Bundles Python scripts** that scrape Play. Review them first, and get the maintainer's OK before installing. |
 | Release | `fdroid-publishing` | `ItsAhadun/fdroid-publishing-skill` | Community skill with one author. Re-read it before use. |
 | Later (Wear OS) | `wear-compose-m3`, `wear-widgets` | `android/skills` | Only if a Wear OS app is built |
