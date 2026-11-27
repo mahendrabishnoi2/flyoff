@@ -51,9 +51,16 @@ class SimulatedFlightTest {
         val end = flight.positionAt(flight.durationSeconds, t0)
         assertEquals(0.0, Geodesy.distanceMeters(jfk, end.latLon), 1.0)
         assertEquals(0.0, end.altitudeMeters!!, 1e-6)
-        assertTrue(end.speedMetersPerSecond!! in 1.0..100.0)
+        // Touchdown is the end of the flight: stopped, not still rolling at landing speed.
+        assertEquals(0.0, end.speedMetersPerSecond!!, 0.0)
         // The final course is the reverse of JFK to LHR's initial course: 51.3525° + 180° (haversine).
         assertEquals(231.3525, end.bearingDegrees!!, 1e-3)
+    }
+
+    @Test
+    fun `lands at landing speed`() {
+        val touchdown = flight.positionAt(flight.durationSeconds - 1e-6, t0)
+        assertTrue("${touchdown.speedMetersPerSecond} m/s", touchdown.speedMetersPerSecond!! in 1.0..100.0)
     }
 
     @Test
@@ -87,7 +94,7 @@ class SimulatedFlightTest {
         val track = flight.track()
         for ((time, position) in track) {
             assertTrue("altitude at $time s", position.altitudeMeters!! in 0.0..11_000.0)
-            assertTrue("speed at $time s", position.speedMetersPerSecond!! > 0.0)
+            if (time < flight.durationSeconds) assertTrue("speed at $time s", position.speedMetersPerSecond!! > 0.0)
             assertTrue("speed at $time s", position.speedMetersPerSecond!! <= 250.0)
         }
         val mid = flight.positionAt(flight.durationSeconds / 2, t0)
@@ -126,7 +133,8 @@ class SimulatedFlightTest {
         val track = short.track(stepSeconds = 5.0)
         val highest = track.maxOf { it.second.altitudeMeters!! }
         assertTrue("peak $highest m", highest in 1_000.0..6_000.0)
-        track.forEach { (time, position) -> assertTrue("speed at $time s", position.speedMetersPerSecond!! > 0.0) }
+        track.filter { it.first < short.durationSeconds }
+            .forEach { (time, position) -> assertTrue("speed at $time s", position.speedMetersPerSecond!! > 0.0) }
         assertEquals(0.0, Geodesy.distanceMeters(destination, short.positionAt(short.durationSeconds, t0).latLon), 1.0)
     }
 
