@@ -104,6 +104,25 @@ What this means:
 | "About 9,000 commercial airports" | ✗ | 9,053 is the count with an **IATA code**, which includes closed fields and heliports. With `scheduled_service=yes` it's **4,336**. Scheduled, large or medium together make **6,348**. |
 | Under 1 MB once filtered | ✓ | 7 columns (ident, iata_code, name, lat, lon, country, municipality): **138 KB gzip** for scheduled-only, 276 KB for IATA-coded |
 
+**What we bundle** (measured 2026-11-27, `tools/airports/build_airports.py`, OurAirports commit `a537e08` of 2026-11-26):
+
+- `scheduled_service=yes` (4,335 rows that day) **and** an IATA code (4,131) **and** not a heliport, balloon port or closed field: **4,077 airports** (1,150 large, 2,094 medium, 762 small, 71 seaplane bases). Heliports are left out because Flyoff tracks aeroplanes. No IATA code is shared by two of them; if one ever is, the larger airport is kept.
+- Ten columns, including an IANA time zone for the ETA in destination local time and search keywords: **369 KB raw, 155 KB gzip** (`app/src/main/assets/airports/airports.tsv`). The APK stores assets compressed (less tightly than gzip -9): 170 KB in the debug APK.
+- Keywords come from OurAirports' `keywords` column, cleaned: Latin-script entries only, no identifier codes (`10AK`, old ICAO codes), nothing the name, city or codes already say, at most 5 entries of 40 characters. 1,194 airports keep some (26 KB of text; the column costs 30 KB raw, 14 KB gzip). They let "new york" find Newark ("New York City"), "tokyo" find Narita, and "nyc", "lon" or "bombay" work. Search ranks a keyword match below any city or name prefix match.
+- Rows are ordered biggest first (type, then the longest open runway from OurAirports `runways.csv`), so a search for "london" lists Heathrow before Gatwick.
+
+### 4.1 Airport time zones: timezone-boundary-builder
+
+OurAirports has no time zones. We give each airport one at build time by point-in-polygon against timezone-boundary-builder's boundaries.
+
+| Question | Answer |
+|---|---|
+| Licence | ✓ **Data: ODbL 1.0** (`DATA_LICENSE` in the repo; README: *"The outputted data is licensed under the Open Data Commons Open Database License (ODbL)"*). It is built from OpenStreetMap. **Code: MIT** (README and `package.json`; we use none of it). |
+| What we use | Release **2026f**, `timezones-with-oceans.geojson.zip` (56 MB zipped, 185 MB of GeoJSON; SHA-256 pinned in the script). The "comprehensive" variant keeps every IANA id (e.g. `America/Phoenix`); "with oceans" covers the whole globe, so shore-side runways always get a zone. Only the `tzid` of the polygon containing each airport ends up in our file. |
+| Consequence | `airports.tsv` is a **derivative database under ODbL**. `app/src/main/assets/airports/NOTICE.txt` says so and credits OurAirports and "timezone-boundary-builder, © OpenStreetMap contributors". The derivative database itself and the script that rebuilds it from the pinned inputs are public in this repo, so it is available under ODbL as the licence requires. The credits screen must list it. |
+| Overlaps | The data has deliberate overlaps. Two hold airports, resolved in the script: Xinjiang (27 airports, `Asia/Urumqi` vs `Asia/Shanghai`) → `Asia/Shanghai`, because flights there run on Beijing time; Sukhumi (SUI, `Asia/Tbilisi` vs `Europe/Moscow`) → `Europe/Moscow`, the clock used there. Any new overlap fails the build. |
+| Result | Every airport falls inside a land zone; none needed an ocean `Etc/GMT±n` zone. 371 distinct zones. |
+
 ---
 
 ## 5. Map tiles
@@ -234,7 +253,8 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 | Bundled world map | OpenFreeMap PMTiles extract, zoom 0–5 (about 15 MB) | ODbL Produced Work: *"OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"* |
 | Corridor download | OpenFreeMap public tiles through the offline downloader, zoom 8 by default, within the terms limits | Same as above |
 | Routes | VRS standing data in a compact custom format, updated weekly from our own GitHub Release | CC0 (credit is optional but nice) |
-| Airports | OurAirports, scheduled-only, 7 columns | Unlicense / public domain |
+| Airports | OurAirports, scheduled-only, with an IATA code, 10 columns | Unlicense / public domain |
+| Airport time zones | timezone-boundary-builder 2026f, point-in-polygon at build time | ODbL: *"timezone-boundary-builder, © OpenStreetMap contributors"*; the airport file becomes an ODbL derivative database |
 | Terrain (later) | Copernicus GLO-30 from the Copernicus Data Space | Modified-data notice **plus** the no-liability sentence |
 | Fonts | Noto Sans, ranges below U+0600 | OFL |
 
@@ -243,13 +263,13 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 - MapLibre: about 5 MB
 - World map to zoom 5: 15 MB
 - Routes: 3 MB
-- Airports: 0.14 MB
+- Airports: 0.16 MB (with time zones and keywords)
 - Fonts: 1–2 MB
 - App code: a few MB
 
 That matches the earlier 25–30 MB target. Per-flight downloads are 2–32 MB at zoom 8.
 
-**Map attribution (ODbL).** The visible "© OpenStreetMap" credit on the map may collapse to an (i) button after 5 seconds. The full credits screen also lists OpenMapTiles and OpenFreeMap, Natural Earth, VRS standing data, OurAirports and, once terrain is added, Copernicus.
+**Map attribution (ODbL).** The visible "© OpenStreetMap" credit on the map may collapse to an (i) button after 5 seconds. The full credits screen also lists OpenMapTiles and OpenFreeMap, Natural Earth, VRS standing data, OurAirports, timezone-boundary-builder (© OpenStreetMap contributors, ODbL) and, once terrain is added, Copernicus.
 
 Whether ODbL share-alike applies to vector tiles is unsettled: the OSM Foundation's licensing group hasn't ruled on it. If we add no data of our own and our build scripts are public, we can provide the underlying database on request either way.
 
@@ -266,7 +286,7 @@ Whether ODbL share-alike applies to vector tiles is unsettled: the OSM Foundatio
 
 - Competitors: [Flight Map](https://play.google.com/store/apps/details?id=uk.pmd.flightmap), [Flymap](https://play.google.com/store/apps/details?id=app.flymap), [Flyover Country](https://play.google.com/store/apps/details?id=com.ionicframework.app303739), [Off 2](https://play.google.com/store/apps/details?id=org.looping.offto), [Flight Mode Map](https://play.google.com/store/apps/details?id=com.spiderservice.flightmodemap)
 - Routes: [VRS standing data](https://github.com/vradarserver/standing-data), [adsb.lol API docs](https://www.adsb.lol/docs/open-data/api), [adsb.lol API source](https://github.com/adsblol/api), [adsbdb](https://github.com/mrjackwills/adsbdb), [OpenFlights data](https://openflights.org/data), [OpenSky API](https://openskynetwork.github.io/opensky-api/), [AeroAPI Personal licence](https://www.flightaware.com/commercial/aeroapi/AeroAPI_Personal_License_Jul2026_v2.pdf), [Aviationstack pricing](https://aviationstack.com/pricing), [Birdwatcher](https://github.com/upanihacks/birdwatcher)
-- Airports and terrain: [OurAirports data](https://github.com/davidmegginson/ourairports-data), [Natural Earth terms](https://www.naturalearthdata.com/about/terms-of-use/), [Copernicus DEM licence](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), [Copernicus DEM release notes](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM)
+- Airports and terrain: [OurAirports data](https://github.com/davidmegginson/ourairports-data), [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) ([DATA_LICENSE](https://github.com/evansiroky/timezone-boundary-builder/blob/master/DATA_LICENSE), [release 2026f](https://github.com/evansiroky/timezone-boundary-builder/releases/tag/2026f)), [Natural Earth terms](https://www.naturalearthdata.com/about/terms-of-use/), [Copernicus DEM licence](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), [Copernicus DEM release notes](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM)
 - Maps: [OpenFreeMap terms](https://openfreemap.org/tos/), [OpenFreeMap repo](https://github.com/hyperknot/openfreemap), [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/), [OSM attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines), [Protomaps downloads](https://docs.protomaps.com/basemaps/downloads), [PMTiles CLI](https://docs.protomaps.com/pmtiles/cli), [Protomaps layers](https://docs.protomaps.com/basemaps/layers), [Simon Willison on PMTiles](https://til.simonwillison.net/gis/pmtiles), [VIPTrack v0.7.0](https://github.com/SysAdminDoc/VIPTrack/releases/tag/v0.7.0)
 - MapLibre: [PMTiles on Android](https://maplibre.org/maplibre-native/android/examples/data/PMTiles/), [licence](https://github.com/maplibre/maplibre-native/blob/main/LICENSE.md)
 - Google: [Maps Platform terms](https://cloud.google.com/maps-platform/terms), [Map Tiles API policies](https://developers.google.com/maps/documentation/tile/policies), [Play size limits](https://support.google.com/googleplay/android-developer/answer/9859372), [Play Asset Delivery](https://developer.android.com/guide/playcore/asset-delivery), [Shrinking APKs, growing installs](https://medium.com/googleplaydev/shrinking-apks-growing-installs-5d3fcba23ce2)

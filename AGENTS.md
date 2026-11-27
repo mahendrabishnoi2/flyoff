@@ -10,7 +10,7 @@ Flyoff is a free, open-source Android app that shows the plane's live GPS positi
 - Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Work only on the current milestone.
 - Research behind the decisions: [docs/research/](docs/research/).
 
-**Current state:** Milestone 1 (map and GPS dot) is code-complete: the bundled offline world map, the location permission flow and a live GPS dot fed by `LocationManager.GPS_PROVIDER` (no Play Services). Independent review fixes are in. Still pending: the maintainer's [phone test](docs/testing/m1-phone-test.md).
+**Current state:** Milestone 2 (flight setup and stats) is code-complete: 4,077 bundled airports with offline search, an origin/destination picker, the great-circle route on the map (antimeridian-safe), flight stats with the ETA in destination local time, and an in-app flight simulator (`SimulatedFlight`, `SimulationTimeline`) that replaces the real GPS while it runs. Still pending: the maintainer's phone tests for [Milestone 1](docs/testing/m1-phone-test.md) and [Milestone 2](docs/testing/m2-phone-test.md).
 
 ## How we work: verify everything
 
@@ -49,10 +49,10 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 | Map engine | MapLibre Native Android, the **`android-sdk-opengl`** artifact, ≥ 13.7.1 (needed to load `pmtiles://asset://`). The plain `android-sdk` artifact uses Vulkan and declares Vulkan as *required*, which would hide the app on phones without it. MapLibre's `2026.x-globe` releases come from a feature branch, so stay on the stable 13.x line. |
 | Map tiles | OpenFreeMap / OpenMapTiles schema. Bundled world map `app/src/main/assets/basemap/world.pmtiles` (zoom 0–5, 7.3 MB, stored uncompressed in the APK); style `assets/style/flyoff.json`; fonts `assets/fonts/`. Route downloads go through MapLibre's offline downloader (Milestone 4). |
 | Location | Android location APIs; a foreground service for in-flight tracking (from Milestone 3) |
-| Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time |
+| Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time. Bundled airports `app/src/main/assets/airports/airports.tsv` (4,077 airports with IANA time zones from timezone-boundary-builder, ODbL; see `NOTICE.txt` next to it). |
 | Android | Package `io.github.mahendrabishnoi2.flyoff`, minSdk 26, targetSdk 37, compileSdk 37.2 (Compose 1.13 needs 37.1+). AGP 9 with its built-in Kotlin support. All versions live in `gradle/libs.versions.toml`. |
 
-**Size budget:** each per-CPU-type release APK must be 30 MB or less (arm64-v8a is 20.4 MB now). Release builds produce per-ABI APKs and a universal APK in `app/build/outputs/apk/release/`.
+**Size budget:** each per-CPU-type release APK must be 30 MB or less (arm64-v8a is 21.3 MB now). Release builds produce per-ABI APKs and a universal APK in `app/build/outputs/apk/release/`.
 
 ## Commands
 
@@ -62,6 +62,8 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 ./gradlew assembleRelease -Pflyoff.testSigning        # installable release build, signed with the debug key (testing only)
 tools/basemap/build_basemap.sh                        # rebuild the bundled map + fonts (needs curl, python3)
 python3 -I -m unittest discover -s tools/basemap -p 'test_*.py'
+python3 -I tools/airports/build_airports.py              # rebuild the bundled airports.tsv (downloads ~73 MB to ~/.cache/flyoff/airports)
+python3 -I -m unittest discover -s tools/airports -p 'test_*.py'
 NODE_PATH=$(npm root -g) node tools/basemap/preview/render.js [outdir]   # headless map screenshots (Playwright + Chromium)
 python3 -I tools/basemap/tile_stats.py app/src/main/assets/basemap/world.pmtiles   # map size per zoom/layer
 ```

@@ -18,8 +18,8 @@ Background research: [data sources and licensing](research/data-sources-validati
 | # | Milestone | Status |
 |---|---|---|
 | 0 | Research and validation | ✅ Done |
-| 1 | Map and GPS dot | 🧪 Built and verified in the cloud; [phone test](testing/m1-phone-test.md) pending |
-| 2 | Flight setup and stats | Planned |
+| 1 | Map and GPS dot | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m1-phone-test.md) pending |
+| 2 | Flight setup and stats | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m2-phone-test.md) pending |
 | 3 | Reliable tracking | Planned |
 | 4 | Route map download | Planned |
 | 5 | Flight-number suggestion | Planned |
@@ -54,7 +54,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 **Goal:** the user can set up a flight and see useful numbers.
 
 **Scope:**
-- Bundled airports: OurAirports filtered to those with scheduled service (about 4,300 airports, about 140 KB).
+- Bundled airports: OurAirports filtered to those with scheduled service and an IATA code, each with its IANA time zone and search keywords (4,077 airports, 369 KB; 155 KB compressed). ✅ Built by `tools/airports/build_airports.py`, with offline search (`AirportSearch`).
 - An origin and destination picker that searches by city, airport name or IATA code, offline.
 - The great-circle route drawn on the map.
 - Stats: altitude, ground speed, heading, distance flown and remaining, time remaining, and ETA in destination local time.
@@ -111,6 +111,17 @@ Background research: [data sources and licensing](research/data-sources-validati
 - GPX/KML track export (no free Android app has this).
 - Dark "cockpit" map theme.
 
+## Before the first public release
+
+- **A credits screen** reachable from the app, listing every bundled data source and font with its licence:
+  - OpenFreeMap, OpenMapTiles and © OpenStreetMap contributors (ODbL) for the map
+  - OurAirports (public domain)
+  - timezone-boundary-builder (ODbL, © OpenStreetMap contributors), which the airport list is derived from
+  - Noto Sans (SIL OFL)
+  - VRS standing data (CC0), once Milestone 5 adds it
+
+  The on-map credit already covers OpenStreetMap. The rest is in `assets/airports/NOTICE.txt` and `docs/research/data-sources-validation.md`, but users can't see it yet.
+
 ## Agent skills
 
 Skills are added at the milestone that needs them, not all at once. **When you start a milestone, install the skills listed for it** before writing code. The full procedure is in [AGENTS.md](../AGENTS.md#agent-skills).
@@ -120,8 +131,8 @@ Skills are added at the milestone that needs them, not all at once. **When you s
 | ✅ Milestone 1 (installed) | `maplibre-native-gl-js-parity` | `maplibre/maplibre-agent-skills` | PMTiles and other differences between MapLibre on Android and on the web |
 | ✅ Milestone 1 (installed) | `android-permissions-security` | `android/skills` | Location permission flow; foreground service later |
 | ✅ Milestone 1 (installed) | `android-ux` | `rcosteira79/android-skills` | Material 3 UX review |
-| Milestone 2 | `testing-setup` | `android/skills` | It adds Hilt if the project has no DI library. **Tell it not to.** |
-| Milestone 2 | `android-testing` | `rcosteira79/android-skills` | Compose UI and coroutine test patterns |
+| ✅ Milestone 2 (installed) | `testing-setup` | `android/skills` | Guidance only. It adds Hilt, Robolectric, JaCoCo and Dropshots if missing. **Tell it not to**; add a test library only when a test needs it. |
+| ✅ Milestone 2 (installed) | `android-testing` | `rcosteira79/android-skills` | Test-first discipline; Compose UI and coroutine test patterns |
 | Milestone 3 | `android-profiler` | `android/skills` | Battery drain and wake locks |
 | Milestone 3 | `jetpack-compose-performance` | `android/skills` | Recomposition and frame-time audits |
 | Release | `play-policy-insights` | `android/skills` | **Bundles Python scripts** that scrape Play. Review them first, and get the maintainer's OK before installing. |

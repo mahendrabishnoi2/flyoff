@@ -68,6 +68,27 @@ class StyleAssetsTest {
         }
     }
 
+    @Test
+    fun `the route goes under every label`() {
+        val layers = style.getJSONArray("layers")
+        val ids = (0 until layers.length()).map { layers.getJSONObject(it).getString("id") }
+        val below = ids.indexOf(ROUTE_BELOW_LAYER)
+        assertTrue("style has no layer $ROUTE_BELOW_LAYER for the route to go under", below >= 0)
+        for (i in 0 until below) {
+            val layer = layers.getJSONObject(i)
+            assertTrue("label layer ${layer.getString("id")} is under the route", layer.getString("type") != "symbol")
+        }
+    }
+
+    @Test
+    fun `the airport label font is bundled`() {
+        val glyphs = style.getString("glyphs")
+        for (range in glyphRanges) {
+            val file = assetFile(glyphs.replace("{fontstack}", AIRPORT_LABEL_FONT).replace("{range}", range))
+            assertTrue("missing glyphs $file", file.isFile && file.length() > 0)
+        }
+    }
+
     private fun assetFile(url: String): File {
         assertTrue("$url is not an asset:// URL", url.startsWith("asset://"))
         return File(assets, url.removePrefix("asset://"))

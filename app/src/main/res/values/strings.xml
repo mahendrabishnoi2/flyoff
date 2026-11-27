@@ -28,4 +28,56 @@
     <!-- Map -->
     <string name="map_error_title">The map didn\'t load</string>
     <string name="map_error_body">Flyoff couldn\'t read its built-in map (%1$s). This is a bug; please report it.</string>
+
+    <!-- Flight setup -->
+    <string name="set_up_flight">Set up flight</string>
+    <string name="close">Close</string>
+    <string name="done">Done</string>
+    <string name="from">From</string>
+    <string name="to">To</string>
+    <string name="choose_airport">Choose an airport</string>
+    <string name="endpoint_description">%1$s: %2$s</string>
+    <string name="swap_airports">Swap origin and destination</string>
+    <string name="search_origin">Search origin</string>
+    <string name="search_destination">Search destination</string>
+    <string name="clear_search">Clear search</string>
+    <string name="airport_search_hint">Search by city, airport name or code, such as London, Heathrow, LHR or EGLL. Works offline.</string>
+    <string name="airport_no_results">No airport matches “%1$s”.</string>
+    <string name="same_airport">%1$s is already the other end of the flight. Origin and destination must be different airports.</string>
+    <string name="clear_flight">Clear flight</string>
+    <string name="airports_loading">Loading airports…</string>
+    <string name="airports_error_title">The airport list didn\'t load</string>
+    <string name="airports_error_body">Flyoff couldn\'t read its built-in airport list (%1$s). This is a bug; please report it.</string>
+    <string name="retry">Try again</string>
+
+    <!-- Flight panel -->
+    <string name="flight_route">%1$s → %2$s</string>
+    <string name="flight_route_description">Flight from %1$s to %2$s</string>
+    <string name="change_flight">Change</string>
+    <string name="route_length">%1$s route</string>
+    <string name="stat_remaining">Remaining</string>
+    <string name="stat_flown">Flown</string>
+    <string name="stat_time_left">Time left</string>
+    <string name="stat_eta">ETA</string>
+    <string name="stat_eta_utc">ETA (UTC)</string>
+    <string name="stat_altitude">Altitude</string>
+    <string name="stat_speed">Speed</string>
+    <string name="stat_heading">Heading</string>
+    <string name="stat_description">%1$s: %2$s</string>
+    <string name="progress_description">Progress %1$s</string>
+
+    <!-- Flight simulator -->
+    <string name="simulate_flight">Simulate flight</string>
+    <string name="simulated_flight">Simulated flight</string>
+    <string name="simulated_badge">Simulated position, not your real one</string>
+    <string name="sim_start">Start</string>
+    <string name="sim_pause">Pause</string>
+    <string name="sim_resume">Resume</string>
+    <string name="sim_replay">Replay</string>
+    <string name="sim_stop">Stop</string>
+    <string name="sim_speed">%1$d×</string>
+    <plurals name="sim_speed_description">
+        <item quantity="one">Real time</item>
+        <item quantity="other">%1$d times real time</item>
+    </plurals>
 </resources>

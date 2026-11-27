@@ -1,9 +1,8 @@
 package io.github.mahendrabishnoi2.flyoff.map
 
-import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ComponentCallbacks2
 import android.content.Context
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.location.Location
 import android.os.Bundle
@@ -18,8 +17,10 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -29,6 +30,7 @@ import io.github.mahendrabishnoi2.flyoff.location.showsBearing
 import io.github.mahendrabishnoi2.flyoff.location.toGpsFix
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
@@ -44,14 +46,30 @@ import org.maplibre.android.maps.MapLibreMap as NativeMap
 data class MapInsets(val left: Int = 0, val top: Int = 0, val right: Int = 0, val bottom: Int = 0)
 
 private const val FOLLOW_TRANSITION_MS = 750L
+private const val ROUTE_FIT_MS = 800
+
+/**
+ * The fitted route follows the panel's size, but not every small change (a stat wrapping).
+ * No more than the 24 dp margin FlyoffScreen fits with, so the route never slips under the panel.
+ */
+private val REFIT_THRESHOLD = 24.dp
+
+/** MapLibre's world is 512 dp wide at zoom 0. */
+private const val WORLD_SIZE_DP = 512.0
 
 /**
  * The bundled offline map in Compose, with the GPS dot.
  *
- * @param location the latest GPS fix to draw, or null for none yet.
- * @param showLocation whether the location dot may be shown (precise location is granted).
+ * @param location the latest position to draw (a GPS fix or a simulated one), or null for none yet.
+ * @param showLocation whether the location dot may be shown: precise location is granted, or
+ *   the flight simulator is running.
  * @param following whether the camera follows the dot. A map gesture turns it off
  *   and reports that through [onFollowingChange].
+ * @param route the flight's route to draw, or null for none.
+ * @param fitRoute whether the camera should show the whole [route]. While this stays true it is
+ *   fitted again when the route or the view size changes, or the padding changes a lot.
+ * @param routePadding space to keep the fitted route clear of (system bars, the panel), in pixels.
+ * @param onCameraMovedByUser called when a map gesture starts moving the camera.
  * @param ornamentInsets space to keep free around the map's own attribution, logo and compass.
  * @param onLoadFailed called with MapLibre's message if the bundled style can't be loaded.
  */
@@ -61,6 +79,10 @@ fun MapLibreMap(
     showLocation: Boolean,
     following: Boolean,
     onFollowingChange: (Boolean) -> Unit,
+    route: MapRoute?,
+    fitRoute: Boolean,
+    routePadding: MapInsets,
+    onCameraMovedByUser: () -> Unit,
     ornamentInsets: MapInsets,
     onLoadFailed: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -72,9 +94,12 @@ fun MapLibreMap(
     }
     var nativeMap by remember(mapView) { mutableStateOf<NativeMap?>(null) }
     var styleLoaded by remember(mapView) { mutableStateOf(false) }
+    var viewSize by remember(mapView) { mutableStateOf(IntSize.Zero) }
+    var lastFit by remember(mapView) { mutableStateOf<FitRequest?>(null) }
     val currentOnFollowingChange by rememberUpdatedState(onFollowingChange)
     val currentOnLoadFailed by rememberUpdatedState(onLoadFailed)
     val currentFollowing by rememberUpdatedState(following)
+    val currentOnCameraMovedByUser by rememberUpdatedState(onCameraMovedByUser)
 
     // Compose forgets effects in reverse order, so the observer below is removed
     // (and the map paused and stopped) before this effect destroys the map.
@@ -127,7 +152,12 @@ fun MapLibreMap(
             nativeMap = map
             map.setMinZoomPreference(MIN_ZOOM)
             map.setMaxZoomPreference(MAX_ZOOM)
+            map.addOnCameraMoveStartedListener { reason ->
+                if (reason == NativeMap.OnCameraMoveStartedListener.REASON_API_GESTURE) currentOnCameraMovedByUser()
+            }
             map.setStyle(Style.Builder().fromUri(STYLE_URI)) { style ->
+                // Before the location component, so the dot is drawn above the route.
+                addRouteLayers(style)
                 activateLocationComponent(context, map.locationComponent, style) { currentOnFollowingChange(false) }
                 styleLoaded = true
             }
@@ -151,10 +181,42 @@ fun MapLibreMap(
     // depends on effect order. Each step only changes what differs.
     LaunchedEffect(styleLoaded, showLocation, location, following) {
         val map = nativeMap ?: return@LaunchedEffect
-        if (styleLoaded) syncLocation(context, map, showLocation, location) { currentFollowing }
+        if (styleLoaded) syncLocation(map, showLocation, location) { currentFollowing }
     }
 
-    AndroidView(factory = { mapView }, modifier = modifier)
+    LaunchedEffect(styleLoaded, route) {
+        val style = nativeMap?.style ?: return@LaunchedEffect
+        if (styleLoaded) showRoute(style, route)
+    }
+
+    LaunchedEffect(styleLoaded, route, fitRoute, routePadding, viewSize, density) {
+        val map = nativeMap ?: return@LaunchedEffect
+        if (!styleLoaded || !fitRoute || route == null) {
+            lastFit = null
+            return@LaunchedEffect
+        }
+        val request = FitRequest(route.points, viewSize.width, viewSize.height, routePadding)
+        if (!needsRefit(lastFit, request, thresholdPx = with(density) { REFIT_THRESHOLD.roundToPx() })) return@LaunchedEffect
+        val fit = fitCamera(
+            points = route.points,
+            widthPx = viewSize.width,
+            heightPx = viewSize.height,
+            padding = routePadding,
+            worldSizePx = WORLD_SIZE_DP * density.density,
+            minZoom = MIN_ZOOM,
+            maxZoom = MAX_ZOOM,
+        ) ?: return@LaunchedEffect
+        val camera = CameraPosition.Builder()
+            .target(LatLng(fit.latitude, fit.longitude))
+            .zoom(fit.zoom)
+            .bearing(0.0)
+            .tilt(0.0)
+            .build()
+        map.animateCamera(CameraUpdateFactory.newCameraPosition(camera), ROUTE_FIT_MS)
+        lastFit = request
+    }
+
+    AndroidView(factory = { mapView }, modifier = modifier.onSizeChanged { viewSize = it })
 }
 
 /**
@@ -162,9 +224,15 @@ fun MapLibreMap(
  * a fix from before a restart or a GPS outage is never shown as current), and
  * applies the follow mode. [following] is read last, so a "Follow me" switched
  * off by a map gesture a moment ago is not switched back on.
+ *
+ * MapLibre marks enabling the component as needing location permission, but that is only for
+ * its own location engine, which [activateLocationComponent] leaves out: the component reads no
+ * location itself and only draws what [LocationComponent.forceLocationUpdate] hands it. So the
+ * flight simulator can show its dot without the permission. Real GPS fixes only ever arrive
+ * with precise location granted (see rememberGpsUpdates).
  */
+@SuppressLint("MissingPermission")
 private fun syncLocation(
-    context: Context,
     map: NativeMap,
     showLocation: Boolean,
     location: Location?,
@@ -172,9 +240,7 @@ private fun syncLocation(
 ) {
     val component = map.locationComponent
     if (!component.isLocationComponentActivated) return
-    val granted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED
-    val visible = showLocation && granted && location != null
+    val visible = showLocation && location != null
     if (component.isLocationComponentEnabled != visible) component.isLocationComponentEnabled = visible
     if (!visible) return
 
