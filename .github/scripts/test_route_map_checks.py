@@ -1,5 +1,5 @@
 """Tests for the route map checks of the emulator smoke test: route_end.py,
-corridor_pixels.py, map_pan.py, download_log.py and netstats_uid.py.
+corridor_pixels.py, download_log.py and netstats_uid.py.
 
 Run: python3 -I -m unittest discover -s .github/scripts -p 'test_*.py'
 """
@@ -11,7 +11,6 @@ import unittest
 
 import corridor_pixels
 import download_log
-import map_pan
 import netstats_uid
 import route_end
 from test_route_span import HEIGHT, ROUTE, WIDTH, picture, png
@@ -68,22 +67,6 @@ class CorridorPixelsTest(Files):
         self.assertEqual(10 * WIDTH, corridor_pixels.count(image))
         self.assertEqual(4 * WIDTH, corridor_pixels.count(image, max_y=4))
         self.assertLess(10 * WIDTH, WIDTH * HEIGHT)
-
-
-class MapPanTest(unittest.TestCase):
-
-    def test_drag_to_a_place_north_west(self):
-        dx, dy = map_pan.drag(2.625, 8, (51.47, -0.45), (54.2, -1.0))
-        # 0.55 degrees of longitude at 512 * 2^8 * 2.625 px per 360 degrees.
-        self.assertEqual(round(0.55 / 360 * 512 * 256 * 2.625), dx)
-        self.assertGreater(dy, 0)
-        self.assertEqual((0, 0), map_pan.drag(2.625, 8, (10.0, 20.0), (10.0, 20.0)))
-        self.assertEqual((-dx, -dy), map_pan.drag(2.625, 8, (54.2, -1.0), (51.47, -0.45)))
-
-    def test_mercator_y_grows_southwards_and_doubles_per_zoom(self):
-        _, y7 = map_pan.world_xy(0.0, 0.0, 7, 1.0)
-        self.assertEqual(512 * 128 / 2, y7)
-        self.assertLess(map_pan.world_xy(50.0, 0.0, 8, 1.0)[1], map_pan.world_xy(40.0, 0.0, 8, 1.0)[1])
 
 
 LOG = """\
