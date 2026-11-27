@@ -6,16 +6,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -69,21 +71,20 @@ fun RouteMapSection(
         return
     }
     val locale = LocalConfiguration.current.locales[0]
+    // Kept short: a taller panel leaves a long route too little map to fit in.
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (ready) {
-                ReadyBadge(Modifier.weight(1f, fill = false))
-            } else {
-                Text(stringResource(R.string.route_map_title), style = MaterialTheme.typography.labelLarge)
-            }
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onOpenStoredMaps) { Text(stringResource(R.string.stored_maps)) }
-            }
-        }
         val running = controls.running
         if (running != null) {
             Running(running, onCancel)
             return@Column
+        }
+        if (ready) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ReadyBadge(Modifier.weight(1f, fill = false))
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
+                    StoredMapsButton(onOpenStoredMaps)
+                }
+            }
         }
         controls.problem?.let { problem ->
             Text(
@@ -128,11 +129,16 @@ fun RouteMapSection(
             val next = maps?.nextChunk(DownloadKind.ROUTE, parts) ?: 0
             if (maps?.hasStarted(DownloadKind.ROUTE, next) == true) Unfinished()
             val size = formatUpToMegabytes(plan.chunks[next].estimatedBytes, locale)
-            DownloadButton(
-                text = if (parts == 1) stringResource(R.string.download_route_map, size) else stringResource(R.string.download_route_part, next + 1, parts, size),
-                enabled = !controls.otherRunning,
-                onClick = { onDownload(plan, next) },
-            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                StoredMapsButton(onOpenStoredMaps)
+                FilledTonalButton(
+                    onClick = { onDownload(plan, next) },
+                    enabled = !controls.otherRunning,
+                    modifier = Modifier.weight(1f, fill = false),
+                ) {
+                    Text(if (parts == 1) stringResource(R.string.download_route_map, size) else stringResource(R.string.download_route_part, next + 1, parts, size))
+                }
+            }
         } else {
             val detailed = controls.detailedPlan ?: return@Column
             val detailedParts = detailed.chunks.size
@@ -158,6 +164,14 @@ fun RouteMapSection(
         if (controls.otherRunning) {
             Text(stringResource(R.string.download_other_flight), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/** An icon, to keep the section to one row of buttons; its name is for screen readers. */
+@Composable
+private fun StoredMapsButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(painterResource(R.drawable.ic_stored_maps), contentDescription = stringResource(R.string.stored_maps))
     }
 }
 

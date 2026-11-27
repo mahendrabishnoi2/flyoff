@@ -107,21 +107,20 @@
     <!-- Flight simulator: GPS gaps -->
     <string name="sim_gps_gaps">GPS gaps</string>
     <!-- Route map downloads (Milestone 4). %1$s etc. are sizes such as "34 MB". -->
-    <string name="route_map_title">Route map</string>
     <string name="route_map_ready">Ready for offline ✓</string>
     <string name="route_map_planning">Working out the route map size…</string>
-    <string name="route_map_summary_one">More map detail along your route: up to %1$s, one download.</string>
+    <string name="route_map_summary_one">Route map: up to %1$s, one download.</string>
     <plurals name="route_map_summary_parts">
-        <item quantity="one">More map detail along your route: up to %1$s in %2$d download.</item>
-        <item quantity="other">More map detail along your route: up to %1$s in %2$d downloads, one tap each.</item>
+        <item quantity="one">Route map: up to %1$s in %2$d download.</item>
+        <item quantity="other">Route map: up to %1$s in %2$d downloads, one tap each.</item>
     </plurals>
     <plurals name="route_map_parts_done">
-        <item quantity="one">%1$d of %2$d part downloaded.</item>
-        <item quantity="other">%1$d of %2$d parts downloaded.</item>
+        <item quantity="one">Route map: %1$d of %2$d part downloaded.</item>
+        <item quantity="other">Route map: %1$d of %2$d parts downloaded.</item>
     </plurals>
     <string name="download_unfinished">The last download stopped before it finished (Flyoff was closed). Download it again to continue where it stopped.</string>
-    <string name="route_map_wifi_only">Downloads on Wi-Fi only.</string>
-    <string name="route_map_wifi_or_mobile">Downloads on Wi-Fi or mobile data.</string>
+    <string name="route_map_wifi_only">Wi-Fi only.</string>
+    <string name="route_map_wifi_or_mobile">Wi-Fi or mobile data.</string>
     <string name="download_route_map">Download route map (up to %1$s)</string>
     <string name="download_route_part">Part %1$d of %2$d · up to %3$s</string>
     <string name="detailed_map_summary">Detailed map (zoom 9): up to %1$s, Wi-Fi only.</string>
