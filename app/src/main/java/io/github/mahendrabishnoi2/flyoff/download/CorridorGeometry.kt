@@ -108,6 +108,43 @@ object CorridorGeometry {
         return polygons(ring, centres)
     }
 
+    /**
+     * How far [tileSquares] pulls each square's edges in, as a fraction of a tile: enough that a
+     * neighbouring tile, or a neighbouring child one zoom deeper, is not touched (it is 5× and 10×
+     * [TileCover.EDGE_MARGIN]), and far too little to miss any part of the tile that matters.
+     */
+    const val SQUARE_INSET: Double = 0.005
+
+    /**
+     * Polygons covering exactly [tiles] (all at one zoom), for a download region that must fetch
+     * those tiles whole and, one zoom deeper, all their children. Adjacent tiles in a row merge
+     * into one rectangle; every rectangle is pulled in by [SQUARE_INSET] of a tile on each side so
+     * that tiles which only share an edge are not covered. Rings are closed and
+     * counter-clockwise, with longitudes inside (-180, 180), so the antimeridian is never crossed.
+     */
+    fun tileSquares(tiles: Collection<TileId>): List<List<LatLon>> {
+        if (tiles.isEmpty()) return emptyList()
+        val zoom = tiles.first().z
+        require(tiles.all { it.z == zoom }) { "tiles must all be at one zoom" }
+        val n = (1 shl zoom).toDouble()
+        val result = ArrayList<List<LatLon>>()
+        for ((y, row) in tiles.groupBy { it.y }.toSortedMap()) {
+            val xs = row.map { it.x }.distinct().sorted()
+            var start = 0
+            while (start < xs.size) {
+                var end = start
+                while (end + 1 < xs.size && xs[end + 1] == xs[end] + 1) end++
+                val west = (xs[start] + SQUARE_INSET) / n * 360.0 - 180.0
+                val east = (xs[end] + 1 - SQUARE_INSET) / n * 360.0 - 180.0
+                val north = WebMercator.latitude((y + SQUARE_INSET) / n)
+                val south = WebMercator.latitude((y + 1 - SQUARE_INSET) / n)
+                result += listOf(LatLon(south, west), LatLon(south, east), LatLon(north, east), LatLon(north, west), LatLon(south, west))
+                start = end + 1
+            }
+        }
+        return result
+    }
+
     /** The half circle of [radius] around [centre], from bearing [fromBearing] clockwise to [fromBearing] + 180. */
     private fun arc(centre: LatLon, fromBearing: Double, radius: Double): List<LatLon> =
         (0..CAP_STEPS).map { Geodesy.destination(centre, fromBearing + it * 180.0 / CAP_STEPS, radius) }
