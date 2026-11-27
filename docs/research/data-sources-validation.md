@@ -212,7 +212,22 @@ The ranges come from two ways of counting edge tiles: the lower bound counts til
 - OpenFreeMap corridors are about **1.2–1.6× the Protomaps sizes** above (LHR–JFK zoom 6–8: 16 MB against 7–10 MB; FRA–DEL: 37 MB against 19–32 MB). The tiles carry every `name:xx` translation.
 - **On land the 50 MB limit binds before the 3,000-tile limit.** FRA–DEL zoom 6–8 is only 370 tiles but 37 MB; its zoom-9 layer alone is 67 MB. So long land routes need several downloads at zoom 6–8, and every route except the ocean ones needs several at zoom 9.
 - The sizes are very uneven: sea tiles are a few hundred bytes, city tiles over 200 KB. The tile counts agree with the Protomaps upper bounds (LHR–JFK 400 against 409).
-- **What the app assumes** (`download/TileSizes.kt`): the land-heavy route's mean × 1.5 per zoom, rounded up: 200 KB at zoom 6, 165 KB at zoom 7, 145 KB at zoom 8, 120 KB at zoom 9 (wire bytes). A chunk can lie entirely over land, so the mean of a mixed route would undercount it; the 1.5 headroom covers denser land than FRA–DEL (central Europe, eastern US) and the sampling error of 40 tiles. These figures are close to the pooled p90 of all three routes (159, 162, 163 and 127 KB). They overstate ocean routes several times over, so the app should present its figure as an upper estimate.
+- **Raw bytes.** MapLibre's HTTP client un-gzips tiles, so MapLibre reports raw sizes, and the app plans the 50 MB limit on raw bytes. Raw/wire ratios of the sample means were at most 1.78, 1.56, 1.51 and 1.52 at zooms 6–9 (FRA–DEL at zooms 6–8, FRA–DEL and LHR–JFK at 9); the app uses 1.8, 1.6, 1.55 and 1.55.
+
+**Size table by area, 2026-11-27** (`tools/basemap/tile_size_table.py`, run by `build_basemap.sh`). Reading only the directories of the pinned planet PMTiles (build `20261101_080013_pt`, 460,927 bytes over 3 range requests, no tiles), the app bundles `assets/basemap/tile_sizes.bin` (16 KB): for each of the 1,024 zoom-5 tiles, the mean and max stored size of its descendants at zooms 6–9. Run-length entries count once per tile; tiles absent from the archive (2,416 of 16,384 at zoom 7, all south of about 60° S) count as 0. A typical open-sea tile is 78 bytes stored.
+
+- **The server sends the stored bytes.** For the 464 sampled tiles, the stored lengths in build `20261122_124456_pt`'s directory have exactly the wire means measured above (`ofm_corridor_sizes.py --directory`, 504,949 bytes of directories).
+- **Exact corridor totals** from that directory (wire MB, strip at every zoom): LHR–JFK 13.2 (zoom 6–8) and 23.9 (zoom 9); FRA–DEL 38.4 and 65.2; SYD–LAX 3.7 and 3.8. The 40-tile samples overstated LHR–JFK by about 20%.
+- **Choosing the estimate.** A corridor tile is estimated as its zoom-5 area's mean × the raw ratio × a factor. Raw MB, strip at every zoom, against the measured raw totals:
+
+| Route | Measured raw (zoom 6–8 / 9) | Mean × 1.0 | Mean × 1.25 | **Mean × 1.5** | Area max |
+|---|---|---|---|---|---|
+| LHR–JFK | 23.9 / 39.5 | 18.4 / 28.2 | 23.0 / 35.3 | **27.6 / 42.3** | 50.1 / 149.0 |
+| FRA–DEL | 57.5 / 101.3 | 51.6 / 79.2 | 64.5 / 99.0 | **77.4 / 118.8** | 94.6 / 200.7 |
+| SYD–LAX | 5.8 / 4.2 | 5.4 / 4.8 | 6.8 / 6.0 | **8.2 / 7.2** | 20.0 / 56.8 |
+
+  Corridors run between cities, so their tiles are denser than their areas' means: factors 1.0 and 1.25 undercount LHR–JFK and FRA–DEL, while the areas' max overstates zoom 9 by 2–14×. **The app uses mean × 1.5, at least 512 bytes a tile** (`download/TileSizes.kt`). Without a valid table it falls back to flat raw figures: FRA–DEL's raw mean × 1.5 (360, 255, 215 and 180 KB at zooms 6–9).
+- **Download shape.** The map masks everything outside the downloaded zoom-6 tiles, so a route download takes every zoom-6 tile the 350 km strip touches, whole, with all its zoom-7 children, plus the strip itself at zoom 8 (zoom 9 for "detailed"). LHR–JFK is 33 + 132 + 279 tiles, about 34 MB raw estimated: one download.
 
 ---
 
