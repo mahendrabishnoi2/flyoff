@@ -52,6 +52,7 @@ import io.github.mahendrabishnoi2.flyoff.flight.FlightStats
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStatsCalculator
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStore
 import io.github.mahendrabishnoi2.flyoff.flight.SimulationTimeline
+import io.github.mahendrabishnoi2.flyoff.flight.simulatorPosition
 import io.github.mahendrabishnoi2.flyoff.location.GpsState
 import io.github.mahendrabishnoi2.flyoff.location.LocationAccess
 import io.github.mahendrabishnoi2.flyoff.location.LocationPermission
@@ -96,7 +97,13 @@ fun FlyoffScreen() {
         }
     }
     val simulatedPosition = if (plan != null && activeSimulation != null) {
-        plan.simulatedFlight.positionAt(activeSimulation.timeline.elapsedSeconds(simulatorNow), activeSimulation.takeoffMillis)
+        simulatorPosition(
+            flight = plan.simulatedFlight,
+            timeline = activeSimulation.timeline,
+            takeoffMillis = activeSimulation.takeoffMillis,
+            clockMillis = simulatorNow,
+            wallMillis = System.currentTimeMillis(),
+        )
     } else {
         null
     }
@@ -193,7 +200,7 @@ fun FlyoffScreen() {
                     SimulatorControls(
                         speed = it.timeline.speed,
                         running = it.timeline.running,
-                        atStart = it.timeline.elapsedSeconds(simulatorNow) == 0.0,
+                        atStart = it.takeoffMillis == null,
                         finished = it.timeline.isFinished(simulatorNow),
                     )
                 },
@@ -211,7 +218,8 @@ fun FlyoffScreen() {
                             SimulationTimeline.DEFAULT_SPEED,
                             now,
                         ),
-                        takeoffMillis = System.currentTimeMillis(),
+                        // Stamped on the first Start: waiting before it mustn't skew the ETA.
+                        takeoffMillis = null,
                     )
                 },
                 onSimulatorPlayPause = {
@@ -220,11 +228,11 @@ fun FlyoffScreen() {
                     simulation = if (sim.timeline.running) {
                         sim.copy(timeline = sim.timeline.paused(now))
                     } else {
-                        val replay = sim.timeline.isFinished(now)
+                        val takeOff = sim.takeoffMillis == null || sim.timeline.isFinished(now)
                         sim.copy(
                             timeline = sim.timeline.started(now),
-                            // A replay takes off now; resuming keeps the original take-off time.
-                            takeoffMillis = if (replay) System.currentTimeMillis() else sim.takeoffMillis,
+                            // The first Start and a replay take off now; resuming keeps the take-off time.
+                            takeoffMillis = if (takeOff) System.currentTimeMillis() else sim.takeoffMillis,
                         )
                     }
                 },
