@@ -1,5 +1,32 @@
 package io.github.mahendrabishnoi2.flyoff.flight
 
+import io.github.mahendrabishnoi2.flyoff.geo.Geodesy
+
+/**
+ * Where the simulator shows the plane. Until the replay is first started ([takeoffMillis] null)
+ * it is parked at the origin: on the ground, speed 0, facing along the route, at wall-clock time
+ * [wallMillis], so the stats show no take-off speed or arrival estimate while it waits. After
+ * that it is [flight]'s position [timeline]'s elapsed time after the take-off at [takeoffMillis].
+ */
+fun simulatorPosition(
+    flight: SimulatedFlight,
+    timeline: SimulationTimeline,
+    takeoffMillis: Long?,
+    clockMillis: Long,
+    wallMillis: Long,
+): Position {
+    if (takeoffMillis == null) {
+        return Position(
+            latLon = flight.origin,
+            altitudeMeters = 0.0,
+            speedMetersPerSecond = 0.0,
+            bearingDegrees = Geodesy.initialBearingDegrees(flight.origin, flight.destination),
+            timeMillis = wallMillis,
+        )
+    }
+    return flight.positionAt(timeline.elapsedSeconds(clockMillis), takeoffMillis)
+}
+
 /**
  * The flight simulator's clock: how far into a [SimulatedFlight] of [durationSeconds] the replay
  * is. Simulated time runs at [speed] times real time while [running], stands still while paused,
