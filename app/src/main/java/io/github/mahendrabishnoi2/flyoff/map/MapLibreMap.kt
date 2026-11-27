@@ -112,7 +112,10 @@ fun MapLibreMap(
         createMapView(context, savedState = null)
     }
     var nativeMap by remember(mapView) { mutableStateOf<NativeMap?>(null) }
-    var styleLoaded by remember(mapView) { mutableStateOf(false) }
+    // The loaded style, or null while one loads. The effects below are keyed on it, not on a
+    // loaded flag: a style can load within one frame, and a flag going false and back to true
+    // unseen would leave the new style without the route.
+    var loadedStyle by remember(mapView) { mutableStateOf<Style?>(null) }
     var dotStyles by remember(mapView) { mutableStateOf<DotStyles?>(null) }
     var viewSize by remember(mapView) { mutableStateOf(IntSize.Zero) }
     var lastFit by remember(mapView) { mutableStateOf<FitRequest?>(null) }
@@ -192,7 +195,7 @@ fun MapLibreMap(
         val corridor = styleJson != null
         // Before loading starts: a corridor style may ask for tiles at once.
         if (corridor) currentOnCorridorShown(true)
-        styleLoaded = false
+        loadedStyle = null
         val builder = if (styleJson != null) Style.Builder().fromJson(styleJson) else Style.Builder().fromUri(STYLE_URI)
         map.setStyle(builder) { style ->
             // Before the location component, so the dot is drawn above the route.
@@ -203,7 +206,7 @@ fun MapLibreMap(
                 activateLocationComponent(context, component, style) { currentOnFollowingChange(false) }
                 dotStyles = DotStyles(component.locationComponentOptions)
             }
-            styleLoaded = true
+            loadedStyle = style
             currentOnCorridorShown(corridor)
         }
     }
@@ -223,30 +226,30 @@ fun MapLibreMap(
 
     // One effect sets the dot and camera from the current inputs, so nothing
     // depends on effect order. Each step only changes what differs.
-    LaunchedEffect(styleLoaded, showLocation, location, estimated, following) {
+    LaunchedEffect(loadedStyle, showLocation, location, estimated, following) {
         val map = nativeMap ?: return@LaunchedEffect
         val styles = dotStyles ?: return@LaunchedEffect
-        if (styleLoaded) syncLocation(map, showLocation, location, estimated, styles) { currentFollowing }
+        if (loadedStyle != null) syncLocation(map, showLocation, location, estimated, styles) { currentFollowing }
     }
 
-    LaunchedEffect(styleLoaded, track) {
-        val style = nativeMap?.style ?: return@LaunchedEffect
-        if (styleLoaded) showTrack(style, track)
+    LaunchedEffect(loadedStyle, track) {
+        val style = loadedStyle ?: return@LaunchedEffect
+        showTrack(style, track)
     }
 
-    LaunchedEffect(styleLoaded, track, trackHead) {
-        val style = nativeMap?.style ?: return@LaunchedEffect
-        if (styleLoaded) showTrackHead(style, track.lastOrNull(), trackHead)
+    LaunchedEffect(loadedStyle, track, trackHead) {
+        val style = loadedStyle ?: return@LaunchedEffect
+        showTrackHead(style, track.lastOrNull(), trackHead)
     }
 
-    LaunchedEffect(styleLoaded, route) {
-        val style = nativeMap?.style ?: return@LaunchedEffect
-        if (styleLoaded) showRoute(style, route)
+    LaunchedEffect(loadedStyle, route) {
+        val style = loadedStyle ?: return@LaunchedEffect
+        showRoute(style, route)
     }
 
-    LaunchedEffect(styleLoaded, route, fitRoute, routePadding, viewSize, density) {
+    LaunchedEffect(loadedStyle, route, fitRoute, routePadding, viewSize, density) {
         val map = nativeMap ?: return@LaunchedEffect
-        if (!styleLoaded || !fitRoute || route == null) {
+        if (loadedStyle == null || !fitRoute || route == null) {
             lastFit = null
             return@LaunchedEffect
         }
