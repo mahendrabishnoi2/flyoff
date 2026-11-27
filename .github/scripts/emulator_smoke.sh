@@ -650,6 +650,8 @@ no_crash "simulator without permission"
 echo "== Route map: $ROUTE_FROM to $ROUTE_TO"
 adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
 adb shell pm grant "$PKG" android.permission.ACCESS_COARSE_LOCATION
+# Keep the location dot off the origin airport, where the zoom taps go.
+adb emu geo fix 10.0 45.0 10000 8 450
 # Flyoff's own log lines, for the whole download (logcat's ring buffer may not keep them).
 adb logcat -v threadtime -s Flyoff:I > "$OUT/flyoff-log.txt" 2> /dev/null &
 FLYOFF_LOG_PID=$!
@@ -687,9 +689,10 @@ zoom_to_origin() {
   xy=$(python3 -I "$SCRIPTS/route_end.py" "$OUT/$name-fit.png" "$ROUTE_FROM" "$ROUTE_TO" "$AIRPORTS" "$(panel_top "$name-fit")") ||
     fail "no route to zoom into ($name-fit.png)"
   echo "origin end of the route at $xy"
-  for i in 1 2 3 4 5 6 7; do
-    # Both taps in one shell: `input` goes through `cmd input`, fast enough for a double tap.
-    adb shell "input tap $xy && input tap $xy"
+  for i in 1 2 3 4 5 6 7 8 9; do
+    # Both taps in one shell, 40 to 300 ms apart for Android's double tap: `input`
+    # goes through `cmd input` and can take less than 40 ms (CI run 45989915871).
+    adb shell "input tap $xy; sleep 0.12; input tap $xy"
     sleep 1.5
   done
   sleep 4 # tiles and labels
