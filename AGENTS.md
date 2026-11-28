@@ -52,7 +52,7 @@ Cloud agent containers have **no emulator** (no `/dev/kvm`). GitHub Actions does
 | Data | OurAirports (public domain) and VRS standing-data routes (CC0), packed at build time. Bundled airports `app/src/main/assets/airports/airports.tsv` (4,077 airports with IANA time zones from timezone-boundary-builder, ODbL; see `NOTICE.txt` next to it). Bundled routes `app/src/main/assets/routes/routes.bin` (390,386 callsigns with an all-digit number, 1.08 MB; format documented in `tools/routes/build_routes.py`). |
 | Android | Package `io.github.mahendrabishnoi2.flyoff`, minSdk 26, targetSdk 37, compileSdk 37.2 (Compose 1.13 needs 37.1+). AGP 9 with its built-in Kotlin support. All versions live in `gradle/libs.versions.toml`. |
 
-**Size budget:** each per-CPU-type release APK must be 30 MB or less (arm64-v8a is 22.5 MB now). Release builds produce per-ABI APKs and a universal APK in `app/build/outputs/apk/release/`.
+**Size budget:** each per-CPU-type release APK must be 30 MB or less (arm64-v8a is 22.6 MB now). Release builds produce per-ABI APKs and a universal APK in `app/build/outputs/apk/release/`.
 
 ## Commands
 
@@ -116,7 +116,7 @@ There is no emulator here (no `/dev/kvm`). Push and let CI's emulator job run th
 - **OpenFreeMap downloads** must stay within its terms: each download is started by the user and is at most **3,000 tiles and 50 MB**, uses at most **4 parallel requests**, and sends a **unique User-Agent** naming Flyoff. Split long routes into several downloads.
 - **Don't hotlink Protomaps builds** (`build.protomaps.com`) from the app.
 - **Don't use these flight-data sources:** OpenSky, FlightAware AeroAPI, Aviationstack, adsbdb routes, OpenFlights routes. The reasons are in the research doc.
-- **Always show map attribution:** "OpenFreeMap © OpenMapTiles © OpenStreetMap contributors" on the map (it may collapse to an (i) button). The full list goes on the credits screen.
+- **Always show map attribution:** "OpenFreeMap © OpenMapTiles © OpenStreetMap contributors" on the map (it may collapse to an (i) button). The full list is on the credits screen (More options → Credits and licences, `ui/CreditsScreen.kt`): every bundled data source, font and library is in `credits/Credits.kt`, with its full licence text in `assets/licenses/` (the fonts' is `assets/fonts/OFL.txt`). When you add a data source, font or library, add its credit and licence text there; a unit test checks every library in `app/build.gradle.kts` has one.
 - **Flight numbers are only suggestions.** VRS data is keyed by callsign, and many airlines use callsigns that differ from the flight number. Never present a match as certain.
 - **Add a new data source only after checking its licence.** Record it in `docs/research/data-sources-validation.md`.
 

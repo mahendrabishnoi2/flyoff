@@ -119,6 +119,7 @@ fun FlyoffScreen() {
     val plan = remember(flightCodes, search) { search?.let { s -> flightCodes?.resolve(s::byIata) } }
     var setupOpen by rememberSaveable { mutableStateOf(false) }
     var storedMapsOpen by rememberSaveable { mutableStateOf(false) }
+    var creditsOpen by rememberSaveable { mutableStateOf(false) }
 
     // Route maps: what is stored (read once at start, which also deletes expired maps), the
     // plans for this flight, and the downloaded corridor on the map.
@@ -299,7 +300,7 @@ fun FlyoffScreen() {
             modifier = Modifier.fillMaxSize(),
         )
         // Not composed under the setup screen, so screen readers don't find it there.
-        if (!setupOpen && !storedMapsOpen) Box(
+        if (!setupOpen && !storedMapsOpen && !creditsOpen) Box(
             modifier = Modifier
                 .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -412,6 +413,7 @@ fun FlyoffScreen() {
                     RouteMaps.deleteFlight(context, current.origin.iata, current.destination.iata)
                 },
                 onOpenStoredMaps = { storedMapsOpen = true },
+                onOpenCredits = { creditsOpen = true },
                 modifier = Modifier
                     .widthIn(max = if (landscape) 480.dp else 560.dp)
                     .fillMaxWidth()
@@ -423,7 +425,7 @@ fun FlyoffScreen() {
             )
         }
         // After the panel, so the panel can never draw over it; placed in the free map area.
-        if (simulating && !setupOpen && !storedMapsOpen) {
+        if (simulating && !setupOpen && !storedMapsOpen && !creditsOpen) {
             val freeSide = panel?.let { freeSide(widthPx, heightPx, it) } ?: FreeSide.ABOVE
             val toDp = { px: Int -> with(density) { px.toDp() } }
             SimulatedBadge(
@@ -452,6 +454,7 @@ fun FlyoffScreen() {
                 onClose = { storedMapsOpen = false },
             )
         }
+        if (creditsOpen) CreditsScreen(onClose = { creditsOpen = false })
         if (setupOpen) {
             FlightSetupScreen(
                 airports = airports.state,
@@ -519,6 +522,7 @@ private fun StatusPanel(
     onCancelDownload: () -> Unit,
     onReplaceMaps: () -> Unit,
     onOpenStoredMaps: () -> Unit,
+    onOpenCredits: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -526,6 +530,7 @@ private fun StatusPanel(
         // The buttons stay put; if the panel is taller than the screen (landscape), only the
         // cards below them scroll, anchored at the bottom so the flight card stays in view.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            MoreMenu(onOpenCredits)
             if (plan == null && !flightPending) {
                 if (showStoredMaps) TextButton(onClick = onOpenStoredMaps) { Text(stringResource(R.string.stored_maps)) }
                 FilledTonalButton(onClick = onSetUpFlight) { Text(stringResource(R.string.set_up_flight)) }
