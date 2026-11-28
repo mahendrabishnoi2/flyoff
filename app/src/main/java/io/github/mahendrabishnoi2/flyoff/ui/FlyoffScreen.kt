@@ -128,6 +128,7 @@ fun FlyoffScreen() {
     val flightLog by FlightLog.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { FlightLog.refresh(context) }
     val summaryId = flightLog.summaryId
+    var creditsOpen by rememberSaveable { mutableStateOf(false) }
 
     // Route maps: what is stored (read once at start, which also deletes expired maps), the
     // plans for this flight, and the downloaded corridor on the map.
@@ -316,7 +317,7 @@ fun FlyoffScreen() {
             modifier = Modifier.fillMaxSize(),
         )
         // Not composed under the setup screen, so screen readers don't find it there.
-        val overlayOpen = setupOpen || storedMapsOpen || historyOpen || summaryId != null
+        val overlayOpen = setupOpen || storedMapsOpen || historyOpen || creditsOpen || summaryId != null
         if (!overlayOpen) Box(
             modifier = Modifier
                 .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
@@ -431,6 +432,7 @@ fun FlyoffScreen() {
                 },
                 onOpenStoredMaps = { storedMapsOpen = true },
                 onOpenHistory = { historyOpen = true },
+                onOpenCredits = { creditsOpen = true },
                 modifier = Modifier
                     .widthIn(max = if (landscape) 480.dp else 560.dp)
                     .fillMaxWidth()
@@ -471,6 +473,7 @@ fun FlyoffScreen() {
                 onClose = { storedMapsOpen = false },
             )
         }
+        if (creditsOpen) CreditsScreen(onClose = { creditsOpen = false })
         if (setupOpen) {
             FlightSetupScreen(
                 airports = airports.state,
@@ -548,6 +551,7 @@ private fun StatusPanel(
     onReplaceMaps: () -> Unit,
     onOpenStoredMaps: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenCredits: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -560,6 +564,7 @@ private fun StatusPanel(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
+            MoreMenu(onOpenCredits)
             TextButton(onClick = onOpenHistory) { Text(stringResource(R.string.history)) }
             if (plan == null && !flightPending) {
                 if (showStoredMaps) TextButton(onClick = onOpenStoredMaps) { Text(stringResource(R.string.stored_maps)) }
