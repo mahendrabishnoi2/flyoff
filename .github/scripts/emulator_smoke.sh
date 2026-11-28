@@ -16,6 +16,9 @@
 # BA117 suggests LHR to JFK and "Use this route" sets it up, BA15 (with a stop
 # in Singapore) offers its two legs, an unknown flight number says so and the
 # airport picker still works, and "Update flight data" answers without a crash.
+# Last, the credits screen: More options opens it, it lists OpenStreetMap,
+# OurAirports and VRS, a licence text opens from the assets, it scrolls to its
+# end, and it uses no network.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
 # Usage: [FLYOFF_ROUTE=LHR-JFK] emulator_smoke.sh <debug-apk> <out-dir>
@@ -934,6 +937,60 @@ cat "$OUT/routes-update-log.txt"
 adb shell input keyevent KEYCODE_BACK
 wait_for 29-back "^Change$" 10
 no_crash "update flight data"
+
+echo "== Credits and licences"
+net_before=$(netstats dumpsys-30-netstats-before)
+tap 29-back "^More options$"
+wait_for 30-menu "^Credits and licences$" 10
+shot 30-menu
+tap 30-menu "^Credits and licences$"
+wait_for 30-credits "^Flyoff is built on free data" 10
+expect 30-credits "github\.com/mahendrabishnoi2/flyoff"
+shot 30-credits-top
+# OpenStreetMap's licence text, read from the APK's assets.
+ODBL_BUTTON="^Read the ODbL 1\.0 licence of OpenStreetMap$"
+if ! has 30-credits "$ODBL_BUTTON"; then
+  adb shell input swipe 540 1500 540 1000 800
+  sleep 1
+  ui 30-credits
+fi
+tap 30-credits "$ODBL_BUTTON"
+wait_for 30-odbl "ODC Open Database License" 10
+expect 30-odbl "^ODbL 1\.0 · OpenStreetMap$"
+shot 30-licence-odbl
+adb shell input keyevent KEYCODE_BACK
+wait_for 30-credits-back "^Credits and licences$" 10
+# Scroll to the end, noting the credits that must be listed on the way.
+seen=""
+for dump in 30-credits 30-credits-back; do
+  for want in OpenStreetMap OurAirports VRS; do
+    if has "$dump" "$want"; then seen="$seen $want"; fi
+  done
+done
+for i in $(seq 1 30); do
+  adb shell input swipe 540 1900 540 900 600
+  sleep 1
+  ui "30-scroll-$i"
+  for want in OpenStreetMap OurAirports VRS; do
+    if has "30-scroll-$i" "$want"; then seen="$seen $want"; fi
+  done
+  if has "30-scroll-$i" "^Thank you to everyone"; then break; fi
+  [ "$i" -lt 30 ] || fail "the credits list didn't reach its end after 30 swipes (30-scroll-30)"
+done
+for want in OpenStreetMap OurAirports VRS; do
+  case " $seen " in *" $want "*) ;; *) fail "'$want' isn't on the credits screen (30-credits*, 30-scroll-*)" ;; esac
+done
+expect "30-scroll-$i" "Timber"
+shot 30-credits-bottom
+echo "credits screen: scrolled to its end in $i swipe(s), saw$seen"
+adb shell input keyevent KEYCODE_BACK
+wait_for 30-back "^Change$" 10
+net_after=$(netstats dumpsys-30-netstats-after)
+echo "app uid $uid: $((net_after - net_before)) bytes while the credits screen was open"
+if [ "$net_before" != 0 ] && [ $((net_after - net_before)) -gt 10000 ]; then
+  fail "the app used $((net_after - net_before)) bytes of network on the credits screen"
+fi
+no_crash "credits"
 
 adb logcat -d > "$OUT/logcat.txt"
 echo "PASS: all smoke checks"
