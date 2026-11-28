@@ -135,4 +135,21 @@ class TrackFileTest {
         track.append(point(0))
         assertEquals(listOf(point(0)), track.open(lhrJfk, t0 - 3_600_000L))
     }
+
+    @Test
+    fun contentsReadsAnyFlightWhateverItsAge() {
+        val (file, track) = newFile()
+        assertNull(track.contents())
+        track.open(lhrJfk, now)
+        assertEquals(TrackContents(lhrJfk, emptyList()), track.contents())
+        track.append(point(0))
+        track.append(point(1))
+        // Long after the flight, for another route: still read, for the flight log.
+        assertEquals(TrackContents(lhrJfk, listOf(point(0), point(1))), track.contents())
+        // A half-written last line is dropped, as read() does.
+        file.appendText("1767225610000,51.47000,-0.4")
+        assertEquals(TrackContents(lhrJfk, listOf(point(0), point(1))), track.contents())
+        file.writeText("not a track\n")
+        assertNull(track.contents())
+    }
 }
