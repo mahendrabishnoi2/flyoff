@@ -120,7 +120,7 @@ Background research: [data sources and licensing](research/data-sources-validati
   - Noto Sans (SIL OFL)
   - VRS standing data (CC0)
 
-  The on-map credit already covers OpenStreetMap. The rest is in `assets/airports/NOTICE.txt`, `assets/routes/NOTICE.txt` and `docs/research/data-sources-validation.md`, but users can't see it yet.
+  ✅ **More options (⋮) → Credits and licences** on the main screen (`ui/CreditsScreen`, list in `credits/Credits`). It also lists Natural Earth and the open-source libraries in the APK, and opens each licence's full text from `assets/licenses/` offline; links open in the browser only on a tap. The on-map credit and its (i) button are unchanged. Checked by unit tests and the CI emulator; [phone test](testing/credits-phone-test.md) pending.
 
 ## Agent skills
 
