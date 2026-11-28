@@ -14,11 +14,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -54,12 +56,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mahendrabishnoi2.flyoff.R
 import io.github.mahendrabishnoi2.flyoff.airports.Airport
 import io.github.mahendrabishnoi2.flyoff.airports.AirportSearch
+import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
 import io.github.mahendrabishnoi2.flyoff.flight.Endpoint
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.FlightDraft
+import io.github.mahendrabishnoi2.flyoff.routes.FlightLookup
+import io.github.mahendrabishnoi2.flyoff.routes.RouteLeg
+import io.github.mahendrabishnoi2.flyoff.routes.RouteUpdates
 import java.util.IllformedLocaleException
 import java.util.Locale
 
@@ -69,6 +76,10 @@ private const val MAX_RESULTS = 30
  * Full-screen flight setup: two ends (From, To) and one offline search field for the selected
  * end. Picking a result fills that end and moves on to the other one if it is still empty.
  * Choosing the same airport for both ends is refused with a message.
+ *
+ * Above them, an optional flight number suggests a route from the bundled route data
+ * ([FlightNumberSection]); using it fills both ends, which the user then checks.
+ * The whole screen scrolls as one, so it fits with the keyboard up and in landscape.
  *
  * Everything here survives rotation and process death (saved state); nothing is stored until
  * [onDone].
@@ -89,6 +100,11 @@ fun FlightSetupScreen(
     var active by rememberSaveable { mutableStateOf(if (origin == null || destination != null) Endpoint.ORIGIN else Endpoint.DESTINATION) }
     var query by rememberSaveable { mutableStateOf("") }
     var rejected by rememberSaveable { mutableStateOf<String?>(null) }
+    var flightNumber by rememberSaveable { mutableStateOf("") }
+    val routes = rememberRoutes()
+    val context = LocalContext.current
+    val updateState by RouteUpdates.state.collectAsStateWithLifecycle()
+    val routeMaps by RouteMaps.state.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
     val searchFocus = remember { FocusRequester() }
 
@@ -117,6 +133,14 @@ fun FlightSetupScreen(
         }
     }
 
+    fun useLeg(leg: RouteLeg) {
+        update(FlightDraft(leg.origin.iata, leg.destination.iata))
+        rejected = null
+        query = ""
+        active = Endpoint.ORIGIN
+        keyboard?.hide()
+    }
+
     fun select(end: Endpoint) {
         active = end
         query = ""
@@ -127,6 +151,10 @@ fun FlightSetupScreen(
 
     BackHandler(onBack = onClose)
     val search = (airports as? AirportsState.Ready)?.search
+    val routeData = (routes as? RoutesState.Ready)?.data
+    val lookup = remember(flightNumber, routeData, search) {
+        if (routeData == null || search == null) null else FlightLookup.of(flightNumber, routeData, search::byRouteCode)
+    }
 
     Scaffold(
         topBar = {
@@ -156,8 +184,26 @@ fun FlightSetupScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .consumeWindowInsets(padding)
-                .imePadding(),
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
         ) {
+            FlightNumberSection(
+                text = flightNumber,
+                onTextChange = { flightNumber = it },
+                routes = if (search == null && routes is RoutesState.Ready) RoutesState.Loading else routes,
+                lookup = lookup,
+                chosen = draft.toCodes(),
+                onUse = ::useLeg,
+                update = FlightDataUpdate(
+                    state = updateState,
+                    dateSeconds = (routes as? RoutesState.Ready)?.data?.dateSeconds,
+                    mobileDataAllowed = routeMaps.mobileDataAllowed,
+                    onCheck = { RouteUpdates.check(context) },
+                    onDownload = { RouteUpdates.download(context) },
+                    onDismiss = RouteUpdates::dismiss,
+                ),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+            )
             Row(
                 Modifier.padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -275,10 +321,13 @@ private fun Results(
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
-        else -> LazyColumn(Modifier.fillMaxSize()) {
-            items(results, key = { it.iata }) { airport ->
-                AirportRow(airport, onClick = { onPick(airport) })
-                HorizontalDivider()
+        // At most MAX_RESULTS rows, in the screen's own scroll.
+        else -> Column(Modifier.fillMaxWidth()) {
+            for (airport in results) {
+                key(airport.iata) {
+                    AirportRow(airport, onClick = { onPick(airport) })
+                    HorizontalDivider()
+                }
             }
         }
     }

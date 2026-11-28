@@ -12,7 +12,10 @@
 # the route map of FLYOFF_ROUTE (default LHR-CDG, short to stay polite to
 # OpenFreeMap) and check its tile and byte counts, that the map shows it, that
 # moving the map outside it uses no network, and that it still shows in
-# airplane mode after a restart.
+# airplane mode after a restart. Then the Milestone 5 checks: the flight number
+# BA117 suggests LHR to JFK and "Use this route" sets it up, BA15 (with a stop
+# in Singapore) offers its two legs, an unknown flight number says so and the
+# airport picker still works, and "Update flight data" answers without a crash.
 # Screenshots, UI dumps and logcat go to OUT_DIR.
 #
 # Usage: [FLYOFF_ROUTE=LHR-JFK] emulator_smoke.sh <debug-apk> <out-dir>
@@ -841,6 +844,96 @@ adb shell input keyevent KEYCODE_BACK
 wait_for 25-back "^Ready for offline" 10
 adb shell cmd connectivity airplane-mode disable
 no_crash "stored maps"
+
+echo "== Flight number: BA117"
+FLIGHT_FIELD="^Flight number \(optional\)$|^Such as BA117$"
+tap 25-back "^Change$"
+wait_for 26-setup "$FLIGHT_FIELD" 10
+expect 26-setup "^Update flight data$"
+expect 26-setup "^Flight routes from "
+tap 26-setup "$FLIGHT_FIELD"
+sleep 1
+adb shell input text BA117
+wait_for 26-ba117 "^Use this route$" 15
+expect 26-ba117 "^Suggested route$"
+expect 26-ba117 "^BA117 usually flies$"
+expect 26-ba117 "^LHR → JFK$|^London Heathrow Airport to John F"
+expect 26-ba117 "^British Airways · BAW117$"
+expect 26-ba117 "crowd-sourced and may be wrong"
+shot 26-ba117-suggestion
+tap 26-ba117 "^Use this route$"
+wait_for 26-used "^Filled in from BA117" 10
+expect 26-used "^From: LHR "
+expect 26-used "^To: JFK "
+reject 26-used "^Use this route$"
+shot 26-ba117-used
+tap 26-used "^Done$"
+wait_for 26-card "LHR → JFK|^Flight from London Heathrow" 10
+expect 26-card "^Simulate flight$"
+no_crash "flight number BA117"
+shot 26-ba117-card
+
+echo "== Flight number with a stop: BA15"
+tap 26-card "^Change$"
+wait_for 27-setup "$FLIGHT_FIELD" 10
+tap 27-setup "$FLIGHT_FIELD"
+sleep 1
+adb shell input text BA15
+wait_for 27-ba15 "^BA15 usually flies LHR → SIN → SYD" 15
+expect 27-ba15 "^LHR → SIN$|^Use the leg from London Heathrow Airport to Singapore"
+expect 27-ba15 "^SIN → SYD$|^Use the leg from Singapore"
+reject 27-ba15 "^Use this route$"
+shot 27-ba15-legs
+tap 27-ba15 "^SIN → SYD$|^Use the leg from Singapore"
+wait_for 27-leg "^To: SYD " 10
+expect 27-leg "^From: SIN "
+expect 27-leg "^Filled in from BA15"
+shot 27-ba15-leg
+no_crash "flight number BA15"
+
+echo "== Unknown flight number: ZZ9999, then the airport picker"
+tap 27-leg "^Clear flight number$"
+wait_gone 28-cleared "^Filled in from BA15" 10
+tap 28-cleared "$FLIGHT_FIELD"
+sleep 1
+adb shell input text ZZ9999
+wait_for 28-unknown "^No route found for ZZ9999\. Pick the airports below\.$" 10
+reject 28-unknown "^Suggested route$"
+expect 28-unknown "^From: SIN "
+shot 28-unknown
+tap 28-unknown "^To: "
+sleep 1
+pick_airport 28-pick-destination CDG
+wait_for 28-picked "^To: CDG " 10
+expect 28-picked "^From: SIN "
+expect 28-picked "^No route found for ZZ9999"
+shot 28-unknown-picked
+tap 28-picked "^Done$"
+wait_for 28-card "SIN → CDG|^Flight from Singapore" 10
+no_crash "unknown flight number"
+shot 28-unknown-card
+
+echo "== Update flight data"
+# The routes-data release may not be published yet: then the check reports
+# that it couldn't reach it. Once it is, a newer file downloads and is used.
+tap 28-card "^Change$"
+wait_for 29-setup "^Update flight data$" 10
+tap 29-setup "^Update flight data$"
+UPDATE_ANSWER="^Couldn.t reach Flyoff.s flight data|^Not on Wi-Fi\. Connect to Wi-Fi, or allow mobile data|^Flight routes are up to date|^Newer flight routes from "
+wait_for 29-update "$UPDATE_ANSWER" 60
+shot 29-update
+if has 29-update "^Newer flight routes from "; then
+  tap 29-update "^Download$"
+  wait_for 29-updated "^Flight routes updated to |^The download didn.t pass its checks|^Couldn.t reach Flyoff.s flight data" 120
+  shot 29-updated
+  expect 29-updated "^Flight routes updated to "
+fi
+echo "flight data update: $(python3 -I -c 'import re,sys,xml.etree.ElementTree as E; print(next(n.get("text") for n in E.parse(sys.argv[1]).iter("node") if re.search(sys.argv[2], n.get("text",""))))' "$OUT/29-update.xml" "$UPDATE_ANSWER")"
+adb logcat -d -s Flyoff:I | grep "routes-update" > "$OUT/routes-update-log.txt" || true
+cat "$OUT/routes-update-log.txt"
+adb shell input keyevent KEYCODE_BACK
+wait_for 29-back "^Change$" 10
+no_crash "update flight data"
 
 adb logcat -d > "$OUT/logcat.txt"
 echo "PASS: all smoke checks"

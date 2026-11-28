@@ -94,6 +94,8 @@ What this means:
 - **Product decision:** the main input is the origin and destination airports. A flight-number match is shown as a suggestion the user confirms. Multi-stop routes need the user to pick a leg.
 - **Weekly updates:** publish a small routes file from our own GitHub Release or Pages, built by CI. Don't have every user pull from the adsb.lol mirror.
 
+**As built in Milestone 5** (`tools/routes/build_routes.py`, VRS commit `bd5f5d5` of 2026-11-27): 630,397 callsigns read; the 390,386 (61.9%) whose number part is all digits are kept and 240,011 (38.1%) are dropped. With 1,490 airlines (and their IATA codes), 3,768 airport codes and 94,074 distinct routes, the bundled `routes.bin` is 1.08 MB (1.80 MB before gzip). Against the bundled airports, 375,692 kept routes (96%) have every stop in the list and 376,443 have at least one leg; most of the rest use closed or unserved airports (Istanbul Atatürk LTBA, Berlin Tegel EDDT, Ukrainian airports). The weekly update is published by `.github/workflows/routes.yml` to the `routes-data` release of this repository; the app fetches it only when the user asks.
+
 ---
 
 ## 4. Airports

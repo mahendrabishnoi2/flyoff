@@ -1,0 +1,15 @@
+routes.bin: flight routes by callsign, for suggesting a flight's airports
+
+Contains information from the VRS standing data
+(https://github.com/vradarserver/standing-data), the routes and airlines that
+Virtual Radar Server users submit to the SDM site, dedicated to the public domain
+under CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
+Credit is not required; we give it with thanks.
+
+The routes are crowd-sourced and may be wrong or out of date, so Flyoff shows a
+match only as a suggestion for the user to confirm.
+
+The file is rebuilt from a pinned commit of that repository by
+tools/routes/build_routes.py in Flyoff's source repository, which documents the
+format. A newer copy may be downloaded by the app from Flyoff's own GitHub
+Release (tag routes-data) when the user asks for it.

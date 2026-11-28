@@ -1,0 +1,90 @@
+name: Flight data
+
+# Weekly: rebuild the flight routes file from the newest VRS standing data
+# (CC0) and publish it, with its manifest, to the routes-data release, where
+# the app's "Update flight data" finds it (see routes/RouteUpdate.kt). The build
+# runs on any branch to try it; only main publishes.
+on:
+  schedule:
+    # Mondays 05:37 UTC, after VRS's daily commit (about 04:49 UTC).
+    - cron: "37 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flight-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the routes file
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Routes tests
+        run: python3 -I -m unittest discover -s tools/routes -p 'test_*.py'
+
+      - name: Build from the newest VRS data
+        run: |
+          {
+            echo '### Flight data build'
+            echo '```'
+            python3 -I tools/routes/build_routes.py --latest --out dist
+            echo '```'
+            echo '```json'
+            cat dist/routes-v1.json
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the file against its manifest
+        working-directory: dist
+        run: |
+          python3 -I -c '
+          import hashlib, json
+          m = json.load(open("routes-v1.json"))
+          data = open(m["file"], "rb").read()
+          assert m["file"] == "routes-v1.bin" and m["format_version"] == 1, m
+          assert len(data) == m["size"], (len(data), m["size"])
+          assert hashlib.sha256(data).hexdigest() == m["sha256"], "sha256"
+          print("ok:", m["file"], m["size"], "bytes,", m["date"])
+          '
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: routes-data
+          path: dist/
+          retention-days: 14
+
+  publish:
+    name: Publish to the routes-data release
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: routes-data
+          path: dist
+
+      - name: Publish, replacing the old files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view routes-data > /dev/null 2>&1; then
+            gh release create routes-data --target "$GITHUB_SHA" --latest=false \
+              --title "Flight route data" \
+              --notes "Flight routes for Flyoff's \"Update flight data\", rebuilt weekly by .github/workflows/routes.yml from the VRS standing data (https://github.com/vradarserver/standing-data, CC0 1.0). Routes are crowd-sourced and may be wrong. Not an app release."
+          fi
+          # The file first, then the manifest that describes it: an app that reads the
+          # new manifest finds the new file (a mismatch in between fails its checks).
+          gh release upload routes-data dist/routes-v1.bin --clobber
+          gh release upload routes-data dist/routes-v1.json --clobber
+          gh release view routes-data --json assets --jq '.assets[] | "\(.name) \(.size)"'

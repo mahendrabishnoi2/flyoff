@@ -22,7 +22,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 | 2 | Flight setup and stats | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m2-phone-test.md) pending |
 | 3 | Reliable tracking | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m3-phone-test.md) pending |
 | 4 | Route map download | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m4-phone-test.md) pending |
-| 5 | Flight-number suggestion | Planned |
+| 5 | Flight-number suggestion | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m5-phone-test.md) pending |
 | 6 | Extras | Planned |
 | – | Later | Ideas |
 
@@ -96,10 +96,10 @@ Background research: [data sources and licensing](research/data-sources-validati
 **Goal:** quicker setup for users who know their flight number.
 
 **Scope:**
-- A build script that packs the VRS standing-data routes (CC0, about 630k) into a compact format of about 3 MB.
-- Match a flight number to a callsign: convert the IATA airline code to ICAO, then look up the number. Show the result as a **suggestion the user confirms**, never as fact. Airport selection stays the main input.
-- For multi-stop routes, the user picks the leg.
-- A weekly data update, downloaded from our own GitHub Release.
+- A build script that packs the VRS standing-data routes (CC0, about 630k) into a compact format of about 3 MB. ✅ `tools/routes/build_routes.py`: the 390,386 callsigns with an all-digit number (the other 38% can't map to a flight number) in a 1.08 MB file with its own airport list, a format version and the data's date.
+- Match a flight number to a callsign: convert the IATA airline code to ICAO, then look up the number. Show the result as a **suggestion the user confirms**, never as fact. Airport selection stays the main input. ✅ An optional field in flight setup (`routes/FlightLookup`, `ui/FlightNumberSection`); the flight number only fills the airports and isn't stored.
+- For multi-stop routes, the user picks the leg. ✅
+- A weekly data update, downloaded from our own GitHub Release. ✅ `.github/workflows/routes.yml` publishes to the `routes-data` release from `main`; "Update flight data" downloads it on the user's tap. Not live until the maintainer runs the workflow on `main`.
 
 **Done when:** BA117 suggests LHR→JFK, and an unknown flight falls back cleanly to the airport picker.
 
@@ -118,9 +118,9 @@ Background research: [data sources and licensing](research/data-sources-validati
   - OurAirports (public domain)
   - timezone-boundary-builder (ODbL, © OpenStreetMap contributors), which the airport list is derived from
   - Noto Sans (SIL OFL)
-  - VRS standing data (CC0), once Milestone 5 adds it
+  - VRS standing data (CC0)
 
-  The on-map credit already covers OpenStreetMap. The rest is in `assets/airports/NOTICE.txt` and `docs/research/data-sources-validation.md`, but users can't see it yet.
+  The on-map credit already covers OpenStreetMap. The rest is in `assets/airports/NOTICE.txt`, `assets/routes/NOTICE.txt` and `docs/research/data-sources-validation.md`, but users can't see it yet.
 
 ## Agent skills
 

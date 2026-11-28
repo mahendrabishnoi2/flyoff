@@ -50,6 +50,44 @@
     <string name="airports_error_body">Flyoff couldn\'t read its built-in airport list (%1$s). This is a bug; please report it.</string>
     <string name="retry">Try again</string>
 
+    <!-- Flight number suggestion (Milestone 5). Routes are crowd-sourced: always a suggestion, never a fact. -->
+    <string name="flight_number_label">Flight number (optional)</string>
+    <string name="flight_number_placeholder">Such as BA117</string>
+    <string name="clear_flight_number">Clear flight number</string>
+    <string name="flight_number_invalid">Type a flight number such as BA117 or U2 1234, or pick the airports below.</string>
+    <string name="flight_routes_loading">Loading flight routes…</string>
+    <string name="flight_routes_error">Flight numbers can\'t be looked up (%1$s). This is a bug; please report it. Pick the airports below.</string>
+    <string name="flight_not_found">No route found for %1$s. Pick the airports below.</string>
+    <string name="flight_unknown_airports">The route Flyoff has for %1$s (%2$s) uses airports that aren\'t in its list. Pick the airports below.</string>
+    <string name="suggested_route">Suggested route</string>
+    <!-- Airline name and callsign, e.g. "British Airways · BAW117". -->
+    <string name="suggestion_airline">%1$s · %2$s</string>
+    <string name="suggestion_usually_flies">%1$s usually flies</string>
+    <string name="suggestion_route_names">%1$s to %2$s</string>
+    <!-- %2$s is the stops, e.g. "LHR → SIN → SYD". -->
+    <string name="suggestion_stops">%1$s usually flies %2$s. Which leg is yours?</string>
+    <string name="use_this_route">Use this route</string>
+    <string name="use_leg_description">Use the leg from %1$s to %2$s</string>
+    <string name="suggestion_unknown_stops">Not in Flyoff\'s airport list, so not offered: %1$s.</string>
+    <string name="suggestion_note">Routes are crowd-sourced and may be wrong or out of date. Check them against your booking.</string>
+    <string name="suggestion_used">Filled in from %1$s\'s usual route. Check the airports, then tap Done.</string>
+    <!-- Flight data update (Milestone 5): newer routes from Flyoff's own GitHub Release, only when the user asks. -->
+    <string name="flight_data_date">Flight routes from %1$s.</string>
+    <string name="update_flight_data">Update flight data</string>
+    <string name="flight_data_checking">Checking for newer flight routes…</string>
+    <string name="flight_data_up_to_date">Flight routes are up to date (%1$s).</string>
+    <!-- %2$s is a size such as "1.1 MB"; %3$s is "Wi-Fi only." or "Wi-Fi or mobile data." -->
+    <string name="flight_data_available">Newer flight routes from %1$s: a %2$s download. %3$s</string>
+    <string name="download_flight_data">Download</string>
+    <string name="not_now">Not now</string>
+    <string name="flight_data_downloading">Downloading flight routes (%1$s)…</string>
+    <string name="flight_data_updated">Flight routes updated to %1$s.</string>
+    <string name="flight_data_wifi_required">Not on Wi-Fi. Connect to Wi-Fi, or allow mobile data in Stored maps.</string>
+    <string name="flight_data_no_connection">Couldn\'t reach Flyoff\'s flight data. Check the connection and try again.</string>
+    <string name="flight_data_bad_file">The download didn\'t pass its checks, so Flyoff kept the flight routes it has.</string>
+    <string name="flight_data_storage">The flight routes couldn\'t be stored on this phone.</string>
+    <string name="flight_data_tracking">Flyoff uses no network while tracking. Update before or after the flight.</string>
+
     <!-- Flight panel -->
     <string name="flight_route">%1$s → %2$s</string>
     <string name="flight_route_description">Flight from %1$s to %2$s</string>
@@ -153,7 +191,7 @@
     <string name="stored_maps_total">Total: %1$s</string>
     <string name="stored_maps_empty">No maps downloaded yet. Set up a flight and download its route map from the flight panel.</string>
     <string name="use_mobile_data">Use mobile data for route maps</string>
-    <string name="use_mobile_data_body">The detailed map always waits for Wi-Fi.</string>
+    <string name="use_mobile_data_body">Also for flight data updates. The detailed map always waits for Wi-Fi.</string>
     <plurals name="stored_route_parts">
         <item quantity="one">Route map · %1$d of %2$d part</item>
         <item quantity="other">Route map · %1$d of %2$d parts</item>
