@@ -4,8 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.location.Location
+import io.github.mahendrabishnoi2.flyoff.airports.AirportCatalog
+import io.github.mahendrabishnoi2.flyoff.airports.AirportSearch
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
+import io.github.mahendrabishnoi2.flyoff.flight.FlightRecord
 import io.github.mahendrabishnoi2.flyoff.flight.TrackPoint
+import io.github.mahendrabishnoi2.flyoff.geo.LatLon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +64,11 @@ data class TrackingState(
  * [trackFile], and a "tracking wanted" mark in preferences, set while tracking runs and cleared
  * by every stop the app asks for, lets the next launch see that tracking ended without the user
  * ([restore], [TrackingState.interrupted]).
+ *
+ * Whenever tracking ends, however it ends (Stop, arrival, an error, Android closing the app),
+ * and before the track file is deleted or started afresh, the track is copied into the
+ * [FlightLog] ([archive]). The copy is named after the track's first point, so copying a
+ * continued track again replaces the earlier copy.
  */
 // The KTX `edit {}` would need androidx.core:core-ktx as a direct dependency for a few calls.
 @SuppressLint("UseKtx")
@@ -107,13 +116,18 @@ object Tracker {
         }
     }
 
-    /** Stops tracking (the user asked, or the flight changed), and forgets an [TrackingState.interrupted] one. */
-    fun stop(context: Context) {
+    /**
+     * Stops tracking (the user asked, or the flight changed), and forgets an
+     * [TrackingState.interrupted] one. The track goes into the flight log; with [showSummary]
+     * (the user tapped Stop) its summary opens.
+     */
+    fun stop(context: Context, showSummary: Boolean = false) {
         // Before the service's onDestroy, which takes a remaining mark as an interruption.
         clearWanted(context)
         context.stopService(Intent(context, FlightTrackingService::class.java))
         onStopped(null)
         mutableState.update { it.copy(interrupted = null) }
+        archiveLater(context, showSummary)
     }
 
     fun clearError() {
@@ -129,6 +143,8 @@ object Tracker {
         if (state.value.active) return
         val codes = wanted(context) ?: return
         mutableState.update { if (it.active) it else it.copy(interrupted = codes) }
+        // The process died while recording: keep what was recorded, even if it is never resumed.
+        archiveLater(context, showSummary = false)
     }
 
     /** The user doesn't want to resume the interrupted tracking. */
@@ -144,10 +160,60 @@ object Tracker {
         mutableState.update { if (it.active) it else it.copy(trackCodes = codes, track = points) }
     }
 
-    /** Deletes the recorded track: the flight was changed or cleared. Stop tracking first. */
+    /** Deletes the recorded track (after keeping it in the flight log): the flight was changed or cleared. Stop tracking first. */
     suspend fun forgetTrack(context: Context) {
         mutableState.update { it.copy(trackCodes = null, track = emptyList()) }
-        withContext(fileIo) { TrackFile(trackFile(context)).delete() }
+        withContext(fileIo) {
+            archive(context)
+            TrackFile(trackFile(context)).delete()
+        }
+    }
+
+    /**
+     * Copies the track file into the [FlightLog], with the airports' positions from the bundled
+     * list; returns the flight's id, or null when there was nothing to keep (no file, no point)
+     * or it couldn't be stored. The airports are read first, so nothing suspends between reading
+     * the track and storing it.
+     */
+    internal suspend fun archive(context: Context): String? {
+        val airports = airports(context)
+        return withContext(fileIo) {
+            val contents = TrackFile(trackFile(context)).contents()
+            if (contents == null || contents.points.isEmpty()) return@withContext null
+            val record = FlightRecord(
+                codes = contents.codes,
+                origin = airports?.byIata(contents.codes.origin)?.let { LatLon(it.latitude, it.longitude) },
+                destination = airports?.byIata(contents.codes.destination)?.let { LatLon(it.latitude, it.longitude) },
+                simulated = false,
+                points = contents.points,
+            )
+            record.id.takeIf { FlightLog.saveNow(context, record) }
+        }
+    }
+
+    /** [archive] after the track writes already queued; then opens its summary if [showSummary]. */
+    private fun archiveLater(context: Context, showSummary: Boolean) {
+        val app = context.applicationContext
+        fileWrites.launch {
+            val id = archive(app)
+            if (showSummary && id != null) FlightLog.openSummary(id)
+        }
+    }
+
+    private suspend fun airports(context: Context): AirportSearch? = try {
+        AirportCatalog.load(context)
+    } catch (_: IOException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+    /** [FlightLog] deleted the flight in the track file: forget it on the map, and any offer to resume it. */
+    internal fun onTrackDeleted(context: Context) {
+        mutableState.update {
+            if (it.active) it else it.copy(trackCodes = null, track = emptyList(), interrupted = null)
+        }
+        clearWanted(context)
     }
 
     /** The one track file: it belongs to one flight at a time (its header says which). */
@@ -195,17 +261,24 @@ object Tracker {
         mutableState.update { it.copy(providerEnabled = enabled) }
     }
 
-    /** The service ended tracking itself (an error, or the notification's Stop). */
-    internal fun onStoppedByService(context: Context, error: TrackingError?) {
+    /**
+     * The service ended tracking itself (an error, the notification's Stop, or the plane
+     * arrived). The track goes into the flight log; with [showSummary] its summary opens.
+     */
+    internal fun onStoppedByService(context: Context, error: TrackingError?, showSummary: Boolean) {
         clearWanted(context)
         onStopped(error)
+        archiveLater(context, showSummary)
     }
 
-    /** The service is being destroyed; if tracking was still wanted, it was interrupted. */
+    /** The service is being destroyed; if tracking was still wanted, it was interrupted (and the track so far is kept). */
     internal fun onDestroyed(context: Context) {
         val wanted = wanted(context)
         onStopped(null)
-        if (wanted != null) mutableState.update { it.copy(interrupted = wanted) }
+        if (wanted != null) {
+            mutableState.update { it.copy(interrupted = wanted) }
+            archiveLater(context, showSummary = false)
+        }
     }
 
     internal fun clearWanted(context: Context) {

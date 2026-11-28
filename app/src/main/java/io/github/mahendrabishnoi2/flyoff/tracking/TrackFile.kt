@@ -23,6 +23,9 @@ object TrackFileHeader {
     }
 }
 
+/** What a [TrackFile] holds: the flight it belongs to and its points. */
+data class TrackContents(val codes: FlightCodes, val points: List<TrackPoint>)
+
 /**
  * The flown track of one flight, kept in [file]: a [TrackFileHeader] line, then one
  * [TrackLog] line per point. Each point is appended and the file closed at once, so if the app
@@ -48,6 +51,22 @@ class TrackFile(private val file: File) {
             return emptyList()
         }
         return pointsOf(text, codes, nowMillis) ?: emptyList()
+    }
+
+    /**
+     * The flight the file belongs to and every point it has, whatever their age; null when there
+     * is no file or it isn't a track. For the flight log, which keeps every tracked flight.
+     */
+    fun contents(): TrackContents? {
+        val text = try {
+            file.readText()
+        } catch (_: IOException) {
+            return null
+        }
+        val lines = text.split('\n')
+        val codes = TrackFileHeader.parse(lines.first()) ?: return null
+        val points = if (lines.size < 2) emptyList() else lines.subList(1, lines.size - 1).mapNotNull(TrackLog::parse)
+        return TrackContents(codes, points)
     }
 
     /**

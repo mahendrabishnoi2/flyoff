@@ -109,6 +109,21 @@ class SimulatedFlight(
         return Position(here, altitude, speed, bearing, time)
     }
 
+    /**
+     * The track the tracking service would record for this flight taken off at [takeoffMillis]:
+     * a point every [intervalSeconds] of simulated time from take-off, and touchdown. With
+     * [gaps], none during [GpsGaps]' drop-outs, as no fix arrives then. For the flight log.
+     */
+    fun recordedTrack(takeoffMillis: Long, gaps: Boolean, intervalSeconds: Int = 5): List<TrackPoint> {
+        require(intervalSeconds > 0) { "interval $intervalSeconds must be positive" }
+        val times = generateSequence(0.0) { it + intervalSeconds }.takeWhile { it < durationSeconds } + durationSeconds
+        return times
+            .filterNot { gaps && GpsGaps.inGap(it, durationSeconds) }
+            .map { positionAt(it, takeoffMillis) }
+            .map { TrackPoint(it.timeMillis, it.latLon, it.altitudeMeters, it.speedMetersPerSecond) }
+            .toList()
+    }
+
     companion object {
         /** Ground distance of a full climb to cruise altitude. */
         const val CLIMB_DISTANCE_M: Double = 180_000.0

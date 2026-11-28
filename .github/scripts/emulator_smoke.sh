@@ -16,6 +16,12 @@
 # BA117 suggests LHR to JFK and "Use this route" sets it up, BA15 (with a stop
 # in Singapore) offers its two legs, an unknown flight number says so and the
 # airport picker still works, and "Update flight data" answers without a crash.
+# The Milestone 6 checks are in between: Stop shows the tracked flight's summary;
+# a simulated flight on FLYOFF_ROUTE run to touchdown shows its summary with
+# sane numbers; it exports as GPX and KML through Android's file picker, and the
+# files pulled from the emulator pass export_check.py; tracking ends on its own
+# when the plane lands and slows down; History lists the flights, newest first,
+# and deleting them all leaves its empty state.
 # Last, the credits screen: More options opens it, it lists OpenStreetMap,
 # OurAirports and VRS, a licence text opens from the assets, it scrolls to its
 # end, and it uses no network.
@@ -556,13 +562,21 @@ echo "track points: $before before the kill, $resumed after Resume"
 [ "$resumed" -ge $((before - 1)) ] || fail "Resume didn't continue the track ($before points, then $resumed)"
 no_crash "resume after kill"
 
-echo "== Stop tracking"
+echo "== Stop tracking, and the flight's summary"
 fly
 ui 18-before-stop
 tap 18-before-stop "^Stop tracking$"
-wait_for 18-stopped "^Start tracking$" 15
+# Stop keeps the flight in the log and opens its summary over the map.
+wait_for 18-summary "^Flight summary$" 15
+expect 18-summary "LHR → JFK|^Flight from London Heathrow"
+expect 18-summary "^Distance flown: [0-9.,]+ km$"
+expect 18-summary "^Great-circle distance: 5,5[0-9]{2} km$"
+reject 18-summary "^Simulated flight$"
+shot 18-summary
 wait_state dumpsys-18-services service_state absent 10
 wait_state dumpsys-18-notification tracking_notifications 0 10
+adb shell input keyevent KEYCODE_BACK
+wait_for 18-stopped "^Start tracking$" 15
 no_crash "stop tracking"
 shot 18-stopped
 
@@ -847,6 +861,176 @@ adb shell input keyevent KEYCODE_BACK
 wait_for 25-back "^Ready for offline" 10
 adb shell cmd connectivity airplane-mode disable
 no_crash "stored maps"
+
+echo "== Flight log: simulated $ROUTE_FROM to $ROUTE_TO, to touchdown"
+# Flyoff's log lines for the flight log checks (flight-saved, tracking-arrived, flight-deleted).
+adb logcat -v threadtime -s Flyoff:I > "$OUT/flight-log.txt" 2> /dev/null &
+FLYOFF_LOG_PID=$!
+# "lon lat" of an airport in the bundled list, for `geo fix`.
+airport_lon_lat() {
+  python3 -I -c 'import sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    f = line.rstrip("\n").split("\t")
+    if f[0] == sys.argv[2]:
+        print(f[6], f[5])
+        break
+else:
+    sys.exit("no airport " + sys.argv[2])' "$AIRPORTS" "$1" || fail "no $1 in airports.tsv"
+}
+# The route headings ("LHR → CDG") on the History screen dump $1, top to bottom.
+history_routes() {
+  python3 -I -c 'import re, sys, xml.etree.ElementTree as ET
+for n in ET.parse(sys.argv[1]).iter("node"):
+    if re.fullmatch("[A-Z]{3} → [A-Z]{3}", n.get("text", "")):
+        print(n.get("text"))' "$OUT/$1.xml"
+}
+# Dump the UI as $1 until $2 is on screen, scrolling the page up (from below the
+# summary's map) between tries: uiautomator leaves out what is scrolled out of view.
+scroll_to() {
+  local i
+  for i in 1 2 3 4; do
+    ui "$1"
+    if has "$1" "$2"; then return 0; fi
+    adb shell input swipe 540 1900 540 1100 600
+    sleep 1
+  done
+  fail "'$2' not on screen after scrolling ($1)"
+}
+wait_for 30-main "^Simulate flight$" 10
+tap 30-main "^Simulate flight$"
+wait_for 30-sim-ready "^Start$" 10
+tap 30-sim-ready "^300 times real time$"
+ui 30-sim-300
+play=$(settled_xy 30-sim-300 "^Start$")
+tap_xy "$play"
+# The replay runs (LHR-CDG takes about 8 s at 300x, LHR-JFK 77 s) and the screen
+# changes every second, so poll with try_ui, which may fail, until the summary is up.
+sim_start=$SECONDS
+until try_ui 30-summary && has 30-summary "^Flight summary$"; do
+  ((SECONDS - sim_start < 240)) || fail "no summary 240 s after the simulated flight started (30-summary.xml)"
+  sleep 3
+done
+echo "summary up $((SECONDS - sim_start)) s after Start"
+sleep 3 # the map's fit animation
+ui 30-summary
+no_crash "simulated touchdown"
+expect 30-summary "$ROUTE_FROM → $ROUTE_TO|^Flight from"
+expect 30-summary "^Simulated flight$"
+expect 30-summary "^Duration: ([0-9]+ h )?[0-9]+ min$"
+expect 30-summary "^Estimated position: 0 min$"
+flown=$(read_number 30-summary "^Distance flown: ([0-9.,]+) km$")
+direct=$(read_number 30-summary "^Great-circle distance: ([0-9.,]+) km$")
+max_alt=$(read_number 30-summary "^Max altitude: ([0-9,]+) m$")
+max_speed=$(read_number 30-summary "^Max ground speed: ([0-9,]+) km/h$")
+avg_speed=$(read_number 30-summary "^Average speed: ([0-9,]+) km/h$")
+echo "summary: flown $flown km, great circle $direct km, max altitude $max_alt m, max speed $max_speed km/h, average $avg_speed km/h"
+# The simulator flies the great circle, climbing to at most 11,000 m and 900 km/h
+# (less on a short hop); the average includes the climb and descent.
+python3 -I -c 'import sys
+flown, direct, alt, top, avg = map(float, sys.argv[1:])
+ok = direct > 50 and abs(flown - direct) <= max(1, 0.01 * direct) and 1000 <= alt <= 11000 and 250 <= top <= 950 and 100 < avg < top
+sys.exit(0 if ok else 1)' "$flown" "$direct" "$max_alt" "$max_speed" "$avg_speed" ||
+  fail "the simulated flight's summary numbers aren't sane (30-summary.xml)"
+shot 30-summary
+sleep 1
+saved=$(grep "flight-saved id=[0-9]*-$ROUTE_FROM-$ROUTE_TO simulated=true" "$OUT/flight-log.txt" | tail -1 || true)
+[ -n "$saved" ] || fail "no flight-saved log line for the simulated flight (flight-log.txt)"
+python3 -I -c 'import re, sys
+m = re.search(r"points=(\d+) bytes=(\d+) hours=([0-9.]+)", sys.argv[1])
+points, size, hours = int(m[1]), int(m[2]), float(m[3])
+print(f"stored: {size} bytes for {points} points over {hours:.2f} h = {size / hours:.0f} bytes per flight-hour")' "$saved"
+
+echo "== Export GPX and KML through the file picker"
+# Tap $2 on the summary, save under the file picker's suggested name, then pull the
+# file and check it with export_check.py. $1 names the step.
+export_file() {
+  local step="$1" button="$2" path file
+  adb shell 'find /sdcard/ -name "flyoff-*" -type f -delete' || true
+  scroll_to "$step" "^$button$"
+  tap "$step" "^$button$"
+  wait_for "$step-picker" "^(SAVE|Save)$" 30
+  shot "$step-picker"
+  tap "$step-picker" "^(SAVE|Save)$"
+  wait_for "$step-saved" "^Saved flyoff-" 30
+  shot "$step-saved"
+  path=$(adb shell 'find /sdcard/ -name "flyoff-*" -type f' | tr -d '\r' | head -1)
+  [ -n "$path" ] || fail "no flyoff-* file on the shared storage after $button"
+  file="${path##*/}"
+  expect "$step-saved" "^Saved $file$"
+  adb pull "$path" "$OUT/$file" > /dev/null
+  echo "$path: $(wc -c < "$OUT/$file") bytes, $(python3 -I "$SCRIPTS/export_check.py" "$OUT/$file" || fail "$file isn't a valid export")"
+}
+export_file 31-gpx "Export GPX"
+export_file 32-kml "Export KML"
+no_crash "export"
+
+echo "== Tracking ends on its own at arrival: $ROUTE_FROM to $ROUTE_TO"
+adb shell input keyevent KEYCODE_BACK
+wait_for 33-sim-done "^Replay$" 10
+tap 33-sim-done "^Stop$"
+wait_for 33-sim-stopped "^Simulate flight$" 10
+read -r from_lon from_lat < <(airport_lon_lat "$ROUTE_FROM")
+read -r to_lon to_lat < <(airport_lon_lat "$ROUTE_TO")
+# Over the origin at flying speed (300 knots), then stopped at the destination:
+# the recorded points (one per 5 s) show the plane was airborne and has landed,
+# so tracking ends by itself and the summary opens.
+for i in 1 2 3; do adb emu geo fix "$from_lon" "$from_lat" 100 8 300; sleep 1; done
+wait_for 33-ready "^GPS ready" 15
+adb emu geo fix "$from_lon" "$from_lat" 100 8 300
+tap 33-ready "^Start tracking$"
+for i in 1 2 3 4 5 6 7; do adb emu geo fix "$from_lon" "$from_lat" 100 8 300; sleep 1; done
+for i in 1 2 3 4 5 6 7 8; do adb emu geo fix "$to_lon" "$to_lat" 10 8 0; sleep 1; done
+wait_for 33-arrived "^Flight summary$" 30
+sleep 3 # the map's fit animation
+ui 33-arrived
+no_crash "arrival"
+expect 33-arrived "$ROUTE_FROM → $ROUTE_TO|^Flight from"
+reject 33-arrived "^Simulated flight$"
+wait_state dumpsys-33-services service_state absent 10
+grep "tracking-arrived route=$ROUTE_FROM-$ROUTE_TO " "$OUT/flight-log.txt" || fail "no tracking-arrived log line (flight-log.txt)"
+arrived=$(read_number 33-arrived "^Distance flown: ([0-9.,]+) km$")
+echo "tracked to arrival: flown $arrived km, great circle $direct km"
+python3 -I -c 'import sys; f, d = map(float, sys.argv[1:]); sys.exit(0 if 0.95 * d <= f <= 1.05 * d else 1)' "$arrived" "$direct" ||
+  fail "the arrived flight's distance flown isn't the origin-to-destination leg ($arrived km, not about $direct km)"
+shot 33-arrived
+
+echo "== History"
+adb shell input keyevent KEYCODE_BACK
+wait_for 34-main "^History$" 10
+tap 34-main "^History$"
+wait_for 34-history "^Flight history$" 10
+expect 34-history "^Simulated flight$"
+expect 34-history " · ([0-9]+ h )?[0-9]+ min · [0-9.,]+ km$"
+routes=$(history_routes 34-history | tr '\n' '|')
+echo "history, newest first: $routes"
+# The arrival just now, the simulated flight before it, and LHR to JFK (Stop, above).
+[ "$routes" = "$ROUTE_FROM → $ROUTE_TO|$ROUTE_FROM → $ROUTE_TO|LHR → JFK|" ] ||
+  fail "History doesn't list the three flights newest first ($routes; 34-history.xml)"
+shot 34-history
+for n in 3 2 1; do
+  ui "35-history-$n"
+  [ "$(history_routes "35-history-$n" | wc -l)" = "$n" ] || fail "History doesn't have $n flights (35-history-$n.xml)"
+  tap "35-history-$n" "^[A-Z]{3} → [A-Z]{3}$"
+  wait_for "35-summary-$n" "^Flight summary$" 15
+  scroll_to "35-summary-$n" "^Delete$"
+  tap "35-summary-$n" "^Delete$"
+  wait_for "35-confirm-$n" "^Delete flight$" 10
+  [ "$n" = 3 ] && shot 35-delete-confirm
+  tap "35-confirm-$n" "^Delete flight$"
+  wait_for "35-deleted-$n" "^Flight history$" 10
+done
+wait_for 36-history-empty "^No flights yet$" 10
+[ "$(history_routes 36-history-empty | wc -l)" = 0 ] || fail "History isn't empty (36-history-empty.xml)"
+shot 36-history-empty
+sleep 1
+deleted=$(grep -c "flight-deleted id=" "$OUT/flight-log.txt" || true)
+[ "$deleted" = 3 ] || fail "$deleted flight-deleted log lines, not 3 (flight-log.txt)"
+kill "$FLYOFF_LOG_PID" 2> /dev/null || true
+wait "$FLYOFF_LOG_PID" 2> /dev/null || true
+FLYOFF_LOG_PID=
+adb shell input keyevent KEYCODE_BACK
+wait_for 25-back "^Change$" 10
+no_crash "flight log"
 
 echo "== Flight number: BA117"
 FLIGHT_FIELD="^Flight number \(optional\)$|^Such as BA117$"

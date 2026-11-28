@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Backup rules for Android 11 and lower. Empty keeps the platform defaults.
-     Keep in step with data_extraction_rules.xml. -->
-<full-backup-content />
+<!-- Backup rules for Android 11 and lower. Keep in step with data_extraction_rules.xml.
+     The flight log and the track being recorded are location history: they stay on the phone,
+     never in a cloud backup. (Android 11 and lower can't tell cloud from device-to-device here.) -->
+<full-backup-content>
+    <exclude domain="file" path="flights/" />
+    <exclude domain="file" path="track.log" />
+</full-backup-content>

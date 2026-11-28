@@ -23,7 +23,7 @@ Background research: [data sources and licensing](research/data-sources-validati
 | 3 | Reliable tracking | 🧪 Merged; verified in the cloud and on the CI emulator; [phone test](testing/m3-phone-test.md) pending |
 | 4 | Route map download | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m4-phone-test.md) pending |
 | 5 | Flight-number suggestion | 🧪 Code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m5-phone-test.md) pending |
-| 6 | Extras | Planned |
+| 6 | Extras | 🧪 Flight log, summary and GPX/KML export code-complete; verified in the cloud and on the CI emulator; [phone test](testing/m6-phone-test.md) pending. “What’s below me” and the dark theme planned |
 | – | Later | Ideas |
 
 ---
@@ -105,11 +105,20 @@ Background research: [data sources and licensing](research/data-sources-validati
 
 ## Milestone 6: Extras
 
-- "What's below me": the nearest city or region and the country, offline.
-- A flight log and history.
-- A summary screen after landing.
-- GPX/KML track export (no free Android app has this).
-- Dark "cockpit" map theme.
+**Scope:**
+- A flight log and history. 🧪 Code-complete (`flight/FlightLogStore`, `tracking/FlightLog`, `ui/FlightLogScreens`).
+- A summary screen after landing. 🧪 Code-complete (`flight/FlightSummary`).
+- GPX/KML track export (no free Android app has this). 🧪 Code-complete (`flight/TrackExport`).
+- "What's below me": the nearest city or region and the country, offline. Planned (a later PR).
+- Dark "cockpit" map theme. Planned (a later PR).
+
+**Done when (flight log, summary and export):**
+- Every tracked flight is kept after it ends, whether stopped, landed or interrupted and resumed, with its route, start and end times, distance flown and decimated track. ✅ Each flight is one gzipped text file in `filesDir/flights` (about 11–12 kB per flight-hour, measured in `FlightLogStoreTest` and on the CI emulator), copied from `track.log` whenever tracking ends, so a flight in progress during an upgrade is kept too. The log stays out of cloud backup.
+- Simulated flights are kept, clearly marked, once the replay touches down (a replay stopped early isn't kept). ✅
+- History lists the flights newest first with date, route, duration and distance; a flight opens to its summary and can be deleted; History has an empty state. ✅
+- The summary opens when tracking ends (the plane landed and slowed below 50 km/h near the destination, or the user tapped Stop) and from History. It shows the route, the track on the offline map, distance flown against the great-circle distance, duration, max altitude, max ground speed, average speed and the time on an estimated position. ✅
+- GPX 1.1 and KML 2.2 export through Android's file picker (`ACTION_CREATE_DOCUMENT`): track points with UTC time and elevation, and the origin and destination as waypoints or placemarks. Exports hold recorded GPS fixes only, never dead-reckoned positions. ✅ Writers unit-tested (parsed back as XML); KML uses `gx:Track` for per-point times.
+- No network use anywhere in this work. ✅
 
 ## Before the first public release
 

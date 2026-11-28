@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ backup rules. Empty sections keep the platform defaults.
+<!-- Android 12+ backup rules. Everything else keeps the platform defaults.
+     The flight log and the track being recorded are location history: they stay out of cloud
+     backups, but move with a device-to-device transfer to a new phone.
      Exclude large re-downloadable data (map downloads) here once it exists. -->
 <data-extraction-rules>
-    <cloud-backup />
+    <cloud-backup>
+        <exclude domain="file" path="flights/" />
+        <exclude domain="file" path="track.log" />
+    </cloud-backup>
     <device-transfer />
 </data-extraction-rules>

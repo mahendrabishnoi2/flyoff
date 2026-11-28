@@ -208,4 +208,34 @@
     <string name="delete_maps_title">Delete the maps for %1$s?</string>
     <string name="delete_maps_body">You can download them again on Wi-Fi.</string>
     <string name="stored_maps_rule">Flyoff deletes a flight\'s maps 3 days after it lands. A flight counts as landed when tracking records a position within 30 km of the destination. Maps of flights Flyoff didn\'t track to the destination stay until you delete them.</string>
+
+    <!-- Flight log, summary and export (Milestone 6) -->
+    <string name="history">History</string>
+    <string name="flight_history">Flight history</string>
+    <string name="history_empty_title">No flights yet</string>
+    <string name="history_empty_body">Every flight you track is kept here with its route, track and summary. Set up your flight and tap Start tracking before take-off. A simulated flight is kept too, marked as simulated, once it touches down.</string>
+    <!-- Date · duration · distance, e.g. "28 Nov 2026 · 1 h 05 min · 344 km". -->
+    <string name="history_entry">%1$s · %2$s · %3$s</string>
+    <string name="flight_summary">Flight summary</string>
+    <string name="summary_loading">Loading…</string>
+    <string name="summary_missing">This flight couldn\'t be read.</string>
+    <!-- Date, take-off time, landing time, e.g. "28 Nov 2026, 09:05 – 10:10". -->
+    <string name="summary_times">%1$s, %2$s – %3$s</string>
+    <string name="summary_distance_flown">Distance flown</string>
+    <string name="summary_great_circle">Great-circle distance</string>
+    <string name="summary_duration">Duration</string>
+    <string name="summary_max_altitude">Max altitude</string>
+    <string name="summary_max_speed">Max ground speed</string>
+    <string name="summary_average_speed">Average speed</string>
+    <string name="summary_estimated">Estimated position</string>
+    <string name="summary_note">From the phone\'s GPS. Estimated position is the time without a GPS fix in flight, when Flyoff showed an estimate.</string>
+    <string name="export_gpx">Export GPX</string>
+    <string name="export_kml">Export KML</string>
+    <string name="export_saved">Saved %1$s</string>
+    <string name="export_failed">The file couldn\'t be saved.</string>
+    <string name="export_no_picker">This phone has no app to choose where files are saved.</string>
+    <string name="export_note">Exports hold the recorded GPS fixes only, never estimated positions. They are saved only where you choose.</string>
+    <string name="delete_flight_title">Delete the flight %1$s?</string>
+    <string name="delete_flight_body">Its track and summary are deleted from this phone. Files you exported stay where you saved them.</string>
+    <string name="delete_flight">Delete flight</string>
 </resources>

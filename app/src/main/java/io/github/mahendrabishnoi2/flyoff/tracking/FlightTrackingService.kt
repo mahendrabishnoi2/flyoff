@@ -1,6 +1,7 @@
 package io.github.mahendrabishnoi2.flyoff.tracking
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,12 +19,14 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import io.github.mahendrabishnoi2.flyoff.MainActivity
 import io.github.mahendrabishnoi2.flyoff.R
 import io.github.mahendrabishnoi2.flyoff.download.LandingRule
 import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
+import io.github.mahendrabishnoi2.flyoff.flight.ArrivalRule
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.TrackDecimator
 import io.github.mahendrabishnoi2.flyoff.flight.TrackPoint
@@ -51,8 +54,10 @@ import java.io.IOException
  * [TrackDecimator] (one per 5 s) into [Tracker] and the [TrackFile]; the writes are queued in
  * [Tracker], so a stop never drops the newest point.
  *
- * It stops when the user taps Stop (in the app or the notification), when the flight is
- * changed or cleared (the UI stops it), or when location permission is missing. If the user
+ * It stops when the user taps Stop (in the app or the notification), when the plane has arrived
+ * ([ArrivalRule]: landed and slowed to taxi speed), when the flight is changed or cleared (the UI
+ * stops it), or when location permission is missing. Every stop keeps the track in the
+ * [FlightLog]; a Stop and an arrival open the flight's summary. If the user
  * turns location off it keeps running and says so in the notification: the listener stays
  * registered and recording resumes by itself when location comes back, so a mistaken toggle
  * doesn't end the track.
@@ -74,6 +79,9 @@ class FlightTrackingService : Service() {
 
     /** Whether this tracking session has recorded the landing ([LandingRule]) already. */
     private var landed = false
+
+    /** Whether the track has reached flying speed, so that slowing down near the destination is an arrival. */
+    private var airborne = false
     private var jobs: List<Job> = emptyList()
 
     private val listener = object : LocationListener {
@@ -89,6 +97,7 @@ class FlightTrackingService : Service() {
                 Tracker.onPoint(point)
                 Tracker.appendLater(trackFile, point)
                 checkLanded(point)
+                checkArrived(point)
             }
         }
 
@@ -112,6 +121,18 @@ class FlightTrackingService : Service() {
         RouteMaps.markLanded(this, tracked.codes.origin, tracked.codes.destination, point.timeMillis)
     }
 
+    /** Ends tracking, with the summary, once the plane has landed and slowed down ([ArrivalRule]). */
+    @SuppressLint("LogNotTimber")
+    private fun checkArrived(point: TrackPoint) {
+        val tracked = flight ?: return
+        if (ArrivalRule.hasArrived(airborne, point, tracked.origin, tracked.destination)) {
+            Log.i(TAG, "tracking-arrived route=${tracked.codes.origin}-${tracked.codes.destination} at=${point.timeMillis}")
+            stopTracking(null, showSummary = true)
+            return
+        }
+        if (ArrivalRule.isAirborne(point)) airborne = true
+    }
+
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(LocationManager::class.java)
@@ -132,8 +153,8 @@ class FlightTrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val requested = intent?.takeIf { it.action == ACTION_START }?.let(::flightOf)
         if (requested == null) {
-            // The notification's Stop, or nothing to track.
-            stopTracking(null)
+            // The notification's Stop (which opens the summary), or nothing to track.
+            stopTracking(null, showSummary = intent?.action == ACTION_STOP)
             return START_NOT_STICKY
         }
         if (!goForeground(requested)) return START_NOT_STICKY
@@ -176,9 +197,12 @@ class FlightTrackingService : Service() {
         locationManager.removeUpdates(listener)
         flight = requested
         landed = false
+        airborne = false
         decimator.reset()
         jobs = listOf(
             scope.launch {
+                // Keep whatever the file holds in the flight log first: open() may start it afresh.
+                Tracker.archive(this@FlightTrackingService)
                 // Load (or start) the file before the first fix, so no point is lost or doubled.
                 val points = withContext(Tracker.fileIo) {
                     try {
@@ -188,6 +212,7 @@ class FlightTrackingService : Service() {
                     }
                 }
                 points.lastOrNull()?.let(decimator::accept)
+                airborne = points.any(ArrivalRule::isAirborne)
                 Tracker.onStarted(this@FlightTrackingService, requested, points)
                 Tracker.uiVisible.collect { visible -> requestGps(if (visible) VISIBLE_INTERVAL_MS else HIDDEN_INTERVAL_MS) }
             },
@@ -216,11 +241,11 @@ class FlightTrackingService : Service() {
         }
     }
 
-    private fun stopTracking(error: TrackingError?) {
+    private fun stopTracking(error: TrackingError?, showSummary: Boolean = false) {
         locationManager.removeUpdates(listener)
         jobs.forEach { it.cancel() }
         flight = null
-        Tracker.onStoppedByService(this, error)
+        Tracker.onStoppedByService(this, error, showSummary)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -270,6 +295,7 @@ class FlightTrackingService : Service() {
     companion object {
         /** The notification channel; the CI smoke test looks for it in `dumpsys notification`. */
         const val CHANNEL_ID = "flight_tracking"
+        private const val TAG = "Flyoff"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_START = "io.github.mahendrabishnoi2.flyoff.action.START_TRACKING"
         private const val ACTION_STOP = "io.github.mahendrabishnoi2.flyoff.action.STOP_TRACKING"
