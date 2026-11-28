@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The credits: bundled data, fonts and libraries (credits/Credits.kt). -->
+<resources>
+    <string name="credits_group_app">Flyoff</string>
+    <string name="credits_group_map">Map</string>
+    <string name="credits_group_airports">Airports and time zones</string>
+    <string name="credits_group_routes">Flight routes</string>
+    <string name="credits_group_fonts">Fonts</string>
+    <string name="credits_group_libraries">Open-source libraries</string>
+
+    <string name="credits_flyoff">Flyoff is free software: you can share and change it under the GNU General Public License, version 3. Its source code is on GitHub.</string>
+    <string name="credits_openstreetmap">Map data: place names, rivers, coastlines and borders on the map, and all the detail in route maps.</string>
+    <string name="credits_openmaptiles">The vector tile schema the map\'s tiles follow.</string>
+    <string name="credits_openfreemap">The built-in world map is cut from its world map file, and route maps download from its servers when you ask.</string>
+    <string name="credits_natural_earth">Oceans, lakes and country borders when the map is zoomed out.</string>
+    <string name="credits_ourairports">The built-in airports: their names, codes and positions.</string>
+    <string name="credits_timezones">Each airport\'s time zone, so the arrival time shows in local time. With it, the built-in airport list is a derivative database, also under the ODbL; it and the script that rebuilds it are in Flyoff\'s source code.</string>
+    <string name="credits_vrs">Routes by callsign, to suggest the airports for a flight number. They are crowd-sourced and may be wrong, so Flyoff only suggests them.</string>
+    <string name="credits_noto">The typeface of the map\'s labels.</string>
+    <string name="credits_maplibre_native">Draws the map and downloads route maps. Its licence notice includes the licences of the components it is built with.</string>
+    <string name="credits_maplibre_java">GeoJSON and geometry code that MapLibre uses.</string>
+    <string name="credits_maplibre_gestures">Moving, zooming and rotating the map with your fingers.</string>
+    <string name="credits_androidx">The app\'s screens, and Android support libraries.</string>
+    <string name="credits_kotlin">The language Flyoff is written in, and its standard library.</string>
+    <string name="credits_coroutines">Work in the background, such as loading the airports.</string>
+    <string name="credits_okhttp">Downloads route maps and flight data when you ask.</string>
+    <string name="credits_okio">Reading and writing data for OkHttp.</string>
+    <string name="credits_public_suffix">A list of web domains that comes with OkHttp.</string>
+    <string name="credits_gson">Reads JSON for MapLibre.</string>
+    <string name="credits_timber">Logging inside MapLibre.</string>
+
+    <!-- Licence names: standard short names, not translated. -->
+    <string name="licence_gpl_3" translatable="false">GPL-3.0</string>
+    <string name="licence_odbl" translatable="false">ODbL 1.0</string>
+    <string name="licence_cc_by_4" translatable="false">CC BY 4.0</string>
+    <string name="licence_cc0" translatable="false">CC0 1.0</string>
+    <string name="licence_ofl" translatable="false">SIL OFL 1.1</string>
+    <string name="licence_apache_2" translatable="false">Apache-2.0</string>
+    <string name="licence_mpl_2" translatable="false">MPL-2.0</string>
+    <string name="licence_bsd_2" translatable="false">BSD-2-Clause</string>
+    <string name="licence_mit" translatable="false">MIT</string>
+    <string name="licence_unlicense">Public domain (The Unlicense)</string>
+    <string name="licence_public_domain">Public domain</string>
+    <string name="licence_terms_of_use">Terms of use</string>
+</resources>
