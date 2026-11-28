@@ -85,6 +85,8 @@ private const val WORLD_SIZE_DP = 512.0
  * @param maxZoom how far the user may zoom in: [MAX_ZOOM], or more with a detailed corridor.
  * @param onCorridorShown called after each style load with whether it shows the corridor
  *   (true as soon as a corridor style starts loading), and with false when the map goes away.
+ * @param fitPoints what [fitRoute] fits into view instead of the route's points (longitudes
+ *   unwrapped), such as the route and a flown track together; null fits the route.
  */
 @Composable
 fun MapLibreMap(
@@ -105,6 +107,7 @@ fun MapLibreMap(
     maxZoom: Double,
     onCorridorShown: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    fitPoints: List<LatLon>? = null,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -247,16 +250,17 @@ fun MapLibreMap(
         showRoute(style, route)
     }
 
-    LaunchedEffect(loadedStyle, route, fitRoute, routePadding, viewSize, density) {
+    LaunchedEffect(loadedStyle, route, fitPoints, fitRoute, routePadding, viewSize, density) {
         val map = nativeMap ?: return@LaunchedEffect
-        if (loadedStyle == null || !fitRoute || route == null) {
+        val points = fitPoints ?: route?.points
+        if (loadedStyle == null || !fitRoute || points.isNullOrEmpty()) {
             lastFit = null
             return@LaunchedEffect
         }
-        val request = FitRequest(route.points, viewSize.width, viewSize.height, routePadding)
+        val request = FitRequest(points, viewSize.width, viewSize.height, routePadding)
         if (!needsRefit(lastFit, request, thresholdPx = with(density) { REFIT_THRESHOLD.roundToPx() })) return@LaunchedEffect
         val fit = fitCamera(
-            points = route.points,
+            points = points,
             widthPx = viewSize.width,
             heightPx = viewSize.height,
             padding = routePadding,

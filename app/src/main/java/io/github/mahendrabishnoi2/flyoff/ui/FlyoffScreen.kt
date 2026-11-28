@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -64,6 +66,7 @@ import io.github.mahendrabishnoi2.flyoff.download.RouteMaps
 import io.github.mahendrabishnoi2.flyoff.flight.DeadReckoning
 import io.github.mahendrabishnoi2.flyoff.flight.FlightCodes
 import io.github.mahendrabishnoi2.flyoff.flight.FlightPlan
+import io.github.mahendrabishnoi2.flyoff.flight.FlightRecord
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStats
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStatsCalculator
 import io.github.mahendrabishnoi2.flyoff.flight.FlightStore
@@ -94,6 +97,7 @@ import io.github.mahendrabishnoi2.flyoff.map.FreeSide
 import io.github.mahendrabishnoi2.flyoff.map.freeSide
 import io.github.mahendrabishnoi2.flyoff.map.ornamentInsets
 import io.github.mahendrabishnoi2.flyoff.map.routePadding
+import io.github.mahendrabishnoi2.flyoff.tracking.FlightLog
 import io.github.mahendrabishnoi2.flyoff.tracking.TrackedFlight
 import io.github.mahendrabishnoi2.flyoff.tracking.Tracker
 import io.github.mahendrabishnoi2.flyoff.tracking.TrackingError
@@ -119,6 +123,11 @@ fun FlyoffScreen() {
     val plan = remember(flightCodes, search) { search?.let { s -> flightCodes?.resolve(s::byIata) } }
     var setupOpen by rememberSaveable { mutableStateOf(false) }
     var storedMapsOpen by rememberSaveable { mutableStateOf(false) }
+    var historyOpen by rememberSaveable { mutableStateOf(false) }
+    // The flight log: past flights, and the summary that is open (after a flight, or from History).
+    val flightLog by FlightLog.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { FlightLog.refresh(context) }
+    val summaryId = flightLog.summaryId
 
     // Route maps: what is stored (read once at start, which also deletes expired maps), the
     // plans for this flight, and the downloaded corridor on the map.
@@ -142,6 +151,12 @@ fun FlyoffScreen() {
         val sim = activeSimulation ?: return@LaunchedEffect
         if (sim.timeline.running && sim.timeline.isFinished(simulatorNow)) {
             simulation = sim.copy(timeline = sim.timeline.paused(simulatorNow))
+            // Touchdown: the simulated flight goes into the flight log, and its summary opens.
+            val takeoff = sim.takeoffMillis
+            if (plan != null && takeoff != null) {
+                val record = FlightRecord(plan.codes, plan.originLatLon, plan.destinationLatLon, simulated = true, points = plan.simulatedFlight.recordedTrack(takeoff, sim.gaps))
+                FlightLog.saveLater(context, record, openSummary = true)
+            }
         }
     }
     val simulated = if (plan != null && activeSimulation != null) {
@@ -197,6 +212,8 @@ fun FlyoffScreen() {
     var following by rememberSaveable { mutableStateOf(false) }
     // The camera shows the whole route until the user moves the map.
     var cameraMovedByUser by rememberSaveable { mutableStateOf(false) }
+    // The summary has a map of its own and this one is dropped meanwhile: show the route again after.
+    LaunchedEffect(summaryId != null) { if (summaryId != null) cameraMovedByUser = false }
     var mapError by remember { mutableStateOf<String?>(null) }
     val route = remember(plan) {
         plan?.let { MapRoute(it.routePoints, it.origin.iata, it.destination.iata) }
@@ -279,7 +296,7 @@ fun FlyoffScreen() {
         val ornaments = ornamentInsets(widthPx, heightPx, panel, safe)
         val fitPadding = routePadding(widthPx, heightPx, panel, safe, margin = with(density) { 24.dp.roundToPx() })
 
-        MapLibreMap(
+        if (summaryId == null) MapLibreMap(
             location = mapLocation,
             showLocation = precise || activeSimulation != null,
             estimated = estimate != null,
@@ -299,7 +316,8 @@ fun FlyoffScreen() {
             modifier = Modifier.fillMaxSize(),
         )
         // Not composed under the setup screen, so screen readers don't find it there.
-        if (!setupOpen && !storedMapsOpen) Box(
+        val overlayOpen = setupOpen || storedMapsOpen || historyOpen || summaryId != null
+        if (!overlayOpen) Box(
             modifier = Modifier
                 .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -342,7 +360,7 @@ fun FlyoffScreen() {
                         context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                     if (needsAsking) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else startTracking()
                 },
-                onStopTracking = { Tracker.stop(context) },
+                onStopTracking = { Tracker.stop(context, showSummary = true) },
                 onDismissTrackingError = Tracker::clearError,
                 simulating = simulating,
                 flightPending = flightPending,
@@ -412,6 +430,7 @@ fun FlyoffScreen() {
                     RouteMaps.deleteFlight(context, current.origin.iata, current.destination.iata)
                 },
                 onOpenStoredMaps = { storedMapsOpen = true },
+                onOpenHistory = { historyOpen = true },
                 modifier = Modifier
                     .widthIn(max = if (landscape) 480.dp else 560.dp)
                     .fillMaxWidth()
@@ -423,7 +442,7 @@ fun FlyoffScreen() {
             )
         }
         // After the panel, so the panel can never draw over it; placed in the free map area.
-        if (simulating && !setupOpen && !storedMapsOpen) {
+        if (simulating && !overlayOpen) {
             val freeSide = panel?.let { freeSide(widthPx, heightPx, it) } ?: FreeSide.ABOVE
             val toDp = { px: Int -> with(density) { px.toDp() } }
             SimulatedBadge(
@@ -462,6 +481,14 @@ fun FlyoffScreen() {
                 onClose = { setupOpen = false },
             )
         }
+        if (historyOpen) {
+            // The flight being recorded isn't a past flight yet.
+            val recording = tracking.trackCodes?.takeIf { trackingActive }?.let { codes ->
+                tracking.track.firstOrNull()?.let { FlightRecord.idOf(codes, it.timeMillis) }
+            }
+            HistoryScreen(flightLog.entries, hiddenId = recording, onOpen = FlightLog::openSummary, onClose = { historyOpen = false })
+        }
+        if (summaryId != null) FlightSummaryScreen(summaryId, onClose = FlightLog::closeSummary)
     }
 }
 
@@ -483,6 +510,7 @@ private fun SimulatedBadge(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatusPanel(
     permission: LocationPermission,
@@ -519,13 +547,20 @@ private fun StatusPanel(
     onCancelDownload: () -> Unit,
     onReplaceMaps: () -> Unit,
     onOpenStoredMaps: () -> Unit,
+    onOpenHistory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
         // The buttons stay put; if the panel is taller than the screen (landscape), only the
         // cards below them scroll, anchored at the bottom so the flight card stays in view.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // A flow row: on a narrow screen the buttons wrap rather than squeeze.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onOpenHistory) { Text(stringResource(R.string.history)) }
             if (plan == null && !flightPending) {
                 if (showStoredMaps) TextButton(onClick = onOpenStoredMaps) { Text(stringResource(R.string.stored_maps)) }
                 FilledTonalButton(onClick = onSetUpFlight) { Text(stringResource(R.string.set_up_flight)) }
