@@ -1,12 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The credits: bundled data, fonts and libraries (credits/Credits.kt). -->
+<!-- The credits screen (ui/CreditsScreen.kt, credits/Credits.kt). -->
 <resources>
+    <string name="more_options">More options</string>
+    <string name="credits_title">Credits and licences</string>
+    <string name="credits_intro">Flyoff is built on free data and open-source software. Licence texts open here and need no internet; links open in your browser.</string>
+    <string name="credits_footer">Thank you to everyone who makes and shares these.</string>
+
     <string name="credits_group_app">Flyoff</string>
     <string name="credits_group_map">Map</string>
     <string name="credits_group_airports">Airports and time zones</string>
     <string name="credits_group_routes">Flight routes</string>
     <string name="credits_group_fonts">Fonts</string>
     <string name="credits_group_libraries">Open-source libraries</string>
+
+    <!-- %1$s: a licence's short name, such as "ODbL 1.0". -->
+    <string name="credits_licence">Licence: %1$s</string>
+    <string name="credits_licence_text">Licence text</string>
+    <!-- For screen readers. %1$s: the licence's short name; %2$s: what it covers, such as "OpenStreetMap". -->
+    <string name="credits_licence_text_description">Read the %1$s licence of %2$s</string>
+    <string name="credits_licence_terms">Licence terms</string>
+    <!-- For screen readers. %1$s: the licence's short name; %2$s: what it covers. -->
+    <string name="credits_licence_terms_description">Open the %1$s terms of %2$s in your browser</string>
+    <!-- For screen readers, on a link button that shows a web address. %1$s: the address. -->
+    <string name="credits_open_link_description">Open %1$s in your browser</string>
+    <string name="credits_no_browser">No browser to open %1$s</string>
+    <string name="credits_licence_text_error">Couldn\'t read the licence text.</string>
+    <string name="back">Back</string>
 
     <string name="credits_flyoff">Flyoff is free software: you can share and change it under the GNU General Public License, version 3. Its source code is on GitHub.</string>
     <string name="credits_openstreetmap">Map data: place names, rivers, coastlines and borders on the map, and all the detail in route maps.</string>
